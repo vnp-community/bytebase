@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  # ─────────────────────────────────────────────────────────────
+  # PostgreSQL — Bytebase metadata store
+  # ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: bytebase-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bbdev
+      POSTGRES_PASSWORD: bbdev
+      POSTGRES_DB: bbdev
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bbdev -d bbdev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ─────────────────────────────────────────────────────────────
+  # Bytebase Backend — pre-compiled Linux binary mounted in
+  # Uses Google Distroless: no shell, no package manager,
+  # runs as non-root (UID 65534) — minimal attack surface.
+  # ─────────────────────────────────────────────────────────────
+  backend:
+    image: gcr.io/distroless/base-debian12:nonroot
+    container_name: bytebase-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PG_URL: "postgresql://bbdev:bbdev@postgres:5432/bbdev?sslmode=disable"
+    ports:
+      - "${BB_PORT:-8080}:8080"
+    volumes:
+      # Pre-compiled Linux binary (built on host)
+      - ./build/bytebase:/opt/bytebase/bytebase:ro
+      # Persistent data directory (writable)
+      - bbdata:/var/opt/bytebase
+      # Docker detection marker
+      - ./bb.env:/etc/bb.env:ro
+    working_dir: /opt/bytebase
+    entrypoint:
+      - /opt/bytebase/bytebase
+    command:
+      - --port
+      - "8080"
+      - --data
+      - /var/opt/bytebase
+      - --debug
+
+volumes:
+  pgdata:
+    driver: local
+  bbdata:
+    driver: local

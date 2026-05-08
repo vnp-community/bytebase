@@ -1,0 +1,74 @@
+# ═══════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
+# Bytebase Dev Deployment — Server 172.20.2.41
+# Domain: b10.openledger.vn → nginx (103.67.184.32) → this host
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # ─────────────────────────────────────────────────────────────
+  # PostgreSQL — Bytebase metadata store
+  # ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: bb-dev-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PG_USER:-bbdev}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-bbdev}
+      POSTGRES_DB: ${PG_DB:-bbdev}
+    ports:
+      - "127.0.0.1:${PG_PORT:-15432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bbdev -d bbdev"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - bb-net
+
+  # ─────────────────────────────────────────────────────────────
+  # Bytebase Backend — pre-compiled Linux binary
+  # Distroless: no shell, no pkg mgr, non-root (UID 65534)
+  # ─────────────────────────────────────────────────────────────
+  backend:
+    image: gcr.io/distroless/base-debian12:nonroot
+    container_name: bb-dev-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PG_URL: "postgresql://${PG_USER:-bbdev}:${PG_PASSWORD:-bbdev}@postgres:5432/${PG_DB:-bbdev}?sslmode=disable"
+    ports:
+      - "${BB_BIND:-0.0.0.0}:${BB_PORT:-18081}:8080"
+    volumes:
+      # Pre-compiled Linux binary (built on dev machine, scp'd to server)
+      - ./build/bytebase:/opt/bytebase/bytebase:ro
+      # Persistent data directory
+      - bbdata:/var/opt/bytebase
+      # Docker detection marker
+      - ./bb.env:/etc/bb.env:ro
+    working_dir: /opt/bytebase
+    entrypoint:
+      - /opt/bytebase/bytebase
+    command:
+      - --port
+      - "8080"
+      - --external-url
+      - "https://b10.openledger.vn"
+      - --data
+      - /var/opt/bytebase
+    networks:
+      - bb-net
+
+networks:
+  bb-net:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local
+  bbdata:
+    driver: local

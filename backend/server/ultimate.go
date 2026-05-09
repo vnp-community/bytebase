@@ -1,4 +1,13 @@
-//go:build !minidemo
+//go:build !minidemo && !enterprise_core
+
+// AI-CONTEXT: Build Profile = "ultimate" (default)
+// AI-CONTEXT: This file is compiled when NO special build tags are set.
+// AI-CONTEXT: Available engines: ALL 22+ (PostgreSQL, MySQL, TiDB, MariaDB, OceanBase,
+//             Oracle, MSSQL, Snowflake, ClickHouse, MongoDB, Redis, Spanner, BigQuery,
+//             Cassandra, CosmosDB, DynamoDB, Elasticsearch, Hive, Databricks, Trino,
+//             StarRocks, SQLite, CockroachDB, Redshift)
+// AI-CONTEXT: Available plugins: ALL (advisors, parsers, schema designers, webhooks)
+// AI-CONTEXT: See BUILD_PROFILES.md for full profile comparison.
 
 package server
 

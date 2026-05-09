@@ -1,3 +1,12 @@
+//go:build minidemo
+
+// AI-CONTEXT: Build Profile = "minidemo"
+// AI-CONTEXT: This file is compiled ONLY when: -tags minidemo
+// AI-CONTEXT: Available engines: PostgreSQL ONLY (1 engine)
+// AI-CONTEXT: Available plugins: pg parser, pg advisor, pg schema, limited webhooks (dingtalk, feishu, googlechat, slack, wecom)
+// AI-CONTEXT: Excluded: ALL non-PostgreSQL engines and their plugins
+// AI-CONTEXT: See BUILD_PROFILES.md for full profile comparison.
+
 package server
 
 import (

@@ -67,13 +67,13 @@ const (
 	WorkloadIdentityBindingPrefix = "workloadIdentity:"
 )
 
-// GetProjectID returns the project ID from a resource name.
+// Deprecated: Use ParseProjectRef instead.
 func GetProjectID(name string) (string, error) {
-	tokens, err := GetNameParentTokens(name, ProjectNamePrefix)
+	ref, err := ParseProjectRef(name)
 	if err != nil {
 		return "", err
 	}
-	return tokens[0], nil
+	return ref.ProjectID, nil
 }
 
 // GetProjectIDDatabaseGroupID returns the project ID and database group ID from a resource name.
@@ -126,24 +126,22 @@ func GetEnvironmentID(name string) (string, error) {
 	return tokens[0], nil
 }
 
-// GetInstanceID returns the instance ID from a resource name.
+// Deprecated: Use ParseInstanceRef instead.
 func GetInstanceID(name string) (string, error) {
-	// the instance request should be instances/{instance-id}
-	tokens, err := GetNameParentTokens(name, InstanceNamePrefix)
+	ref, err := ParseInstanceRef(name)
 	if err != nil {
 		return "", err
 	}
-	return tokens[0], nil
+	return ref.InstanceID, nil
 }
 
-// GetInstanceDatabaseID returns the instance ID and database ID from a resource name.
+// Deprecated: Use ParseDatabaseResourceRef instead.
 func GetInstanceDatabaseID(name string) (string, string, error) {
-	// the instance request should be instances/{instance-id}/databases/{database-id}
-	tokens, err := GetNameParentTokens(name, InstanceNamePrefix, DatabaseIDPrefix)
+	ref, err := ParseDatabaseResourceRef(name)
 	if err != nil {
 		return "", "", err
 	}
-	return tokens[0], tokens[1], nil
+	return ref.InstanceID, ref.DatabaseName, nil
 }
 
 // GetInstanceDatabaseRevisionID returns the instance ID, database ID, and revision ID from a resource name.
@@ -165,22 +163,22 @@ func GetInstanceDatabaseChangelogID(name string) (string, string, string, error)
 	return tokens[0], tokens[1], tokens[2], nil
 }
 
-// GetUserEmail returns the user email from a resource name.
+// Deprecated: Use ParseUserResourceRef instead.
 func GetUserEmail(name string) (string, error) {
-	tokens, err := GetNameParentTokens(name, UserNamePrefix)
+	ref, err := ParseUserResourceRef(name)
 	if err != nil {
 		return "", err
 	}
-	return tokens[0], nil
+	return ref.Email, nil
 }
 
-// GetSettingName returns the setting name from a resource name.
+// Deprecated: Use ParseSettingRef instead.
 func GetSettingName(name string) (string, error) {
-	token, err := GetNameParentTokens(name, SettingNamePrefix)
+	ref, err := ParseSettingRef(name)
 	if err != nil {
 		return "", err
 	}
-	return token[0], nil
+	return ref.SettingName, nil
 }
 
 // GetIdentityProviderID returns the identity provider ID from a resource name.
@@ -192,17 +190,13 @@ func GetIdentityProviderID(name string) (string, error) {
 	return tokens[0], nil
 }
 
-// GetProjectIDIssueUID returns the project ID and issue UID from the issue name.
+// Deprecated: Use ParseIssueResourceRef instead.
 func GetProjectIDIssueUID(name string) (string, int64, error) {
-	tokens, err := GetNameParentTokens(name, ProjectNamePrefix, IssueNamePrefix)
+	ref, err := ParseIssueResourceRef(name)
 	if err != nil {
 		return "", 0, err
 	}
-	issueUID, err := strconv.ParseInt(tokens[1], 10, 64)
-	if err != nil {
-		return "", 0, errors.Errorf("invalid issue ID %q", tokens[1])
-	}
-	return tokens[0], issueUID, nil
+	return ref.ProjectID, ref.IssueUID, nil
 }
 
 // GetProjectIDIssueUIDIssueCommentID returns the project ID, issue UID and issue comment ID from the issue comment name.
@@ -218,17 +212,13 @@ func GetProjectIDIssueUIDIssueCommentID(name string) (string, int64, string, err
 	return tokens[0], issueUID, tokens[2], nil
 }
 
-// GetProjectIDPlanID returns the project ID and plan ID from a resource name.
+// Deprecated: Use ParseResourcePlanRef instead.
 func GetProjectIDPlanID(name string) (string, int64, error) {
-	tokens, err := GetNameParentTokens(name, ProjectNamePrefix, PlanPrefix)
+	ref, err := ParseResourcePlanRef(name)
 	if err != nil {
 		return "", 0, err
 	}
-	planID, err := strconv.ParseInt(tokens[1], 10, 64)
-	if err != nil {
-		return "", 0, errors.Errorf("invalid plan ID %q", tokens[1])
-	}
-	return tokens[0], planID, nil
+	return ref.ProjectID, ref.PlanUID, nil
 }
 
 // GetProjectIDPlanIDPlanCheckRunID returns the project ID, plan ID and plan check run ID from a resource name.

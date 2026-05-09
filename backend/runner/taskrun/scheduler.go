@@ -150,7 +150,7 @@ func (s *Scheduler) Run(ctx context.Context, wg *sync.WaitGroup) {
 	// Start rollout creator component
 	rolloutCreator := NewRolloutCreator(s.store, s.bus, s.webhookManager)
 	wg.Add(3)
-	go rolloutCreator.Run(ctx, wg, s.bus.RolloutCreationChan)
+	go rolloutCreator.Run(ctx, wg, s.bus.RolloutCreationChan())
 	go s.runPendingTaskRunsScheduler(ctx, wg)
 	go s.runRunningTaskRunsScheduler(ctx, wg)
 
@@ -174,7 +174,7 @@ func (s *Scheduler) runTaskCompletionListener(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case ref := <-s.bus.PlanCompletionCheckChan:
+		case ref := <-s.bus.PlanCompletionChan():
 			s.checkPlanCompletion(ctx, ref)
 		}
 	}

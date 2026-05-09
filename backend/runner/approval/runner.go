@@ -48,7 +48,7 @@ func (r *Runner) Run(ctx context.Context, wg *sync.WaitGroup) {
 
 	for {
 		select {
-		case ref := <-r.bus.ApprovalCheckChan:
+		case ref := <-r.bus.ApprovalChan():
 			if err := r.licenseService.CheckReplicaLimit(ctx); err != nil {
 				slog.Warn("Approval runner skipped due to HA license restriction", log.BBError(err))
 				continue
@@ -143,7 +143,7 @@ func (r *Runner) processIssue(ctx context.Context, ref bus.IssueRef) {
 			return
 		}
 		if approved {
-			r.bus.RolloutCreationChan <- bus.PlanRef{ProjectID: issue.ProjectID, PlanID: *issue.PlanUID}
+			r.bus.RequestRolloutCreation(bus.PlanRef{ProjectID: issue.ProjectID, PlanID: *issue.PlanUID})
 		}
 	}
 }

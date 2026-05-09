@@ -1,0 +1,762 @@
+package v1
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
+
+	"connectrpc.com/connect"
+	"github.com/google/cel-go/cel"
+	celast "github.com/google/cel-go/common/ast"
+	"github.com/gosimple/slug"
+	"github.com/pkg/errors"
+	"google.golang.org/genproto/googleapis/type/expr"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
+
+	"github.com/bytebase/bytebase/backend/common"
+	"github.com/bytebase/bytebase/backend/utils"
+
+	storepb "github.com/bytebase/bytebase/backend/generated-go/store"
+	v1pb "github.com/bytebase/bytebase/backend/generated-go/v1"
+	webhookplugin "github.com/bytebase/bytebase/backend/plugin/webhook"
+	"github.com/bytebase/bytebase/backend/store"
+)
+
+// GetIamPolicy returns the IAM policy for a project.
+func (s *ProjectService) GetIamPolicy(ctx context.Context, req *connect.Request[v1pb.GetIamPolicyRequest]) (*connect.Response[v1pb.IamPolicy], error) {
+	projectID, err := common.GetProjectID(req.Msg.Resource)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	workspaceID := common.GetWorkspaceIDFromContext(ctx)
+	project, err := s.store.GetProject(ctx, &store.FindProjectMessage{
+		Workspace:  workspaceID,
+		ResourceID: &projectID,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if project == nil {
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("cannot found project %s", projectID))
+	}
+
+	policy, err := s.store.GetProjectIamPolicy(ctx, workspaceID, project.ResourceID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	iamPolicy, err := convertToV1IamPolicy(policy)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(iamPolicy), nil
+}
+
+// SetIamPolicy sets the IAM policy for a project.
+func (s *ProjectService) SetIamPolicy(ctx context.Context, req *connect.Request[v1pb.SetIamPolicyRequest]) (*connect.Response[v1pb.IamPolicy], error) {
+	projectID, err := common.GetProjectID(req.Msg.Resource)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	workspaceID := common.GetWorkspaceIDFromContext(ctx)
+	project, err := s.store.GetProject(ctx, &store.FindProjectMessage{
+		Workspace:  workspaceID,
+		ResourceID: &projectID,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if project == nil {
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("project %q not found", req.Msg.Resource))
+	}
+	if project.Deleted {
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("project %q has been deleted", req.Msg.Resource))
+	}
+
+	oldIamPolicyMsg, err := s.store.GetProjectIamPolicy(ctx, workspaceID, project.ResourceID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, errors.Wrapf(err, "failed to find project iam policy with error"))
+	}
+	if req.Msg.Etag != "" && req.Msg.Etag != oldIamPolicyMsg.Etag {
+		return nil, connect.NewError(connect.CodeAborted, errors.Errorf("there is concurrent update to the project iam policy, please refresh and try again"))
+	}
+
+	if err := validateIAMPolicy(ctx, s.store, !s.profile.SaaS, req.Msg, oldIamPolicyMsg); err != nil {
+		return nil, err
+	}
+
+	policy, err := convertToStoreIamPolicy(req.Msg.Policy)
+	if err != nil {
+		return nil, err
+	}
+
+	policyPayload, err := protojson.Marshal(policy)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if _, err = s.store.CreatePolicy(ctx, &store.PolicyMessage{
+		Workspace:         workspaceID,
+		Resource:          common.FormatProject(project.ResourceID),
+		ResourceType:      storepb.Policy_PROJECT,
+		Payload:           string(policyPayload),
+		Type:              storepb.Policy_IAM,
+		InheritFromParent: false,
+		// Enforce cannot be false while creating a policy.
+		Enforce: true,
+	}); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	iamPolicyMessage, err := s.store.GetProjectIamPolicy(ctx, workspaceID, project.ResourceID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	if setServiceData, ok := common.GetSetServiceDataFromContext(ctx); ok {
+		deltas := findIamPolicyDeltas(oldIamPolicyMsg.Policy, iamPolicyMessage.Policy)
+		p, err := convertToProtoAny(deltas)
+		if err != nil {
+			slog.Warn("audit: failed to convert to anypb.Any")
+		}
+		setServiceData(p)
+	}
+
+	iamPolicy, err := convertToV1IamPolicy(iamPolicyMessage)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(iamPolicy), nil
+}
+
+type bindMapKey struct {
+	User string
+	Role string
+}
+
+type condMap map[string]bool
+
+func findIamPolicyDeltas(oriIamPolicy *storepb.IamPolicy, newIamPolicy *storepb.IamPolicy) []*v1pb.BindingDelta {
+	var deltas []*v1pb.BindingDelta
+	oriBindMap := make(map[bindMapKey]condMap)
+	newBindMap := make(map[bindMapKey]condMap)
+
+	// build map.
+	for _, binding := range oriIamPolicy.Bindings {
+		if binding.Condition == nil {
+			continue
+		}
+		for _, mem := range binding.Members {
+			key := bindMapKey{
+				User: mem,
+				Role: binding.Role,
+			}
+
+			exprBytes, err := protojson.Marshal(binding.Condition)
+			if err != nil {
+				return nil
+			}
+			expr := string(exprBytes)
+			if condMap, ok := oriBindMap[key]; ok && condMap != nil {
+				if _, ok := condMap[expr]; ok {
+					continue
+				}
+				oriBindMap[key][expr] = true
+				continue
+			}
+			condMap := make(condMap)
+			condMap[expr] = true
+			oriBindMap[key] = condMap
+		}
+	}
+
+	// find added items.
+	for _, binding := range newIamPolicy.Bindings {
+		for _, mem := range binding.Members {
+			key := bindMapKey{
+				User: mem,
+				Role: binding.Role,
+			}
+			exprBytes, err := protojson.Marshal(binding.Condition)
+			if err != nil {
+				return nil
+			}
+			expr := string(exprBytes)
+
+			// ensure the array is unique.
+			if condMap, ok := newBindMap[key]; ok && condMap != nil {
+				if _, ok := condMap[expr]; ok {
+					continue
+				}
+			}
+			tmpCondMap := make(condMap)
+			tmpCondMap[expr] = true
+			newBindMap[key] = tmpCondMap
+
+			if condMap, ok := oriBindMap[key]; ok && condMap != nil {
+				if _, ok := condMap[expr]; ok {
+					delete(oriBindMap[key], expr)
+					continue
+				}
+			}
+			deltas = append(deltas, &v1pb.BindingDelta{
+				Action:    v1pb.BindingDelta_ADD,
+				Member:    mem,
+				Role:      binding.Role,
+				Condition: binding.Condition,
+			})
+		}
+	}
+
+	// find removed items.
+	for bindMapKey, condMap := range oriBindMap {
+		for cond := range condMap {
+			expr := &expr.Expr{}
+			if err := common.ProtojsonUnmarshaler.Unmarshal([]byte(cond), expr); err != nil {
+				return nil
+			}
+			deltas = append(deltas, &v1pb.BindingDelta{
+				Action:    v1pb.BindingDelta_REMOVE,
+				Member:    bindMapKey.User,
+				Role:      bindMapKey.Role,
+				Condition: expr,
+			})
+		}
+	}
+
+	return deltas
+}
+
+// AddWebhook adds a webhook to a given project.
+func (s *ProjectService) AddWebhook(ctx context.Context, req *connect.Request[v1pb.AddWebhookRequest]) (*connect.Response[v1pb.Project], error) {
+	projectID, err := common.GetProjectID(req.Msg.Project)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	workspaceID := common.GetWorkspaceIDFromContext(ctx)
+	project, err := s.store.GetProject(ctx, &store.FindProjectMessage{
+		Workspace:  workspaceID,
+		ResourceID: &projectID,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if project == nil {
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("project %q not found", req.Msg.Project))
+	}
+	if project.Deleted {
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("project %q has been deleted", req.Msg.Project))
+	}
+
+	if _, err := utils.GetEffectiveExternalURL(ctx, s.store, s.profile, common.GetWorkspaceIDFromContext(ctx)); err != nil {
+		return nil, err
+	}
+
+	create, err := convertToStoreProjectWebhookMessage(req.Msg.Webhook)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
+	// Validate webhook URL against allowed domains
+	if err := webhookplugin.ValidateWebhookURL(create.Payload.GetType(), create.Payload.GetUrl()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.Wrapf(err, "invalid webhook URL"))
+	}
+
+	if _, err := s.store.CreateProjectWebhook(ctx, project.ResourceID, create); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	project, err = s.store.GetProject(ctx, &store.FindProjectMessage{
+		Workspace:  workspaceID,
+		ResourceID: &projectID,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(convertToProject(project)), nil
+}
+
+// UpdateWebhook updates a webhook.
+func (s *ProjectService) UpdateWebhook(ctx context.Context, req *connect.Request[v1pb.UpdateWebhookRequest]) (*connect.Response[v1pb.Project], error) {
+	projectID, webhookID, err := common.GetProjectIDWebhookID(req.Msg.Webhook.Name)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
+	workspaceID := common.GetWorkspaceIDFromContext(ctx)
+	project, err := s.store.GetProject(ctx, &store.FindProjectMessage{
+		Workspace:  workspaceID,
+		ResourceID: &projectID,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if project == nil {
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("project %q not found", projectID))
+	}
+	if project.Deleted {
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("project %q has been deleted", projectID))
+	}
+
+	if _, err := utils.GetEffectiveExternalURL(ctx, s.store, s.profile, common.GetWorkspaceIDFromContext(ctx)); err != nil {
+		return nil, err
+	}
+
+	webhook, err := s.store.GetProjectWebhook(ctx, &store.FindProjectWebhookMessage{
+		ProjectID:  &project.ResourceID,
+		ResourceID: &webhookID,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if webhook == nil {
+		if req.Msg.AllowMissing {
+			// When allow_missing is true and webhook doesn't exist, create a new one
+			// Call AddWebhook instead since we're creating a new webhook
+			return s.AddWebhook(ctx, connect.NewRequest(&v1pb.AddWebhookRequest{
+				Project: fmt.Sprintf("projects/%s", project.ResourceID),
+				Webhook: req.Msg.Webhook,
+			}))
+		}
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("webhook %q not found", req.Msg.Webhook.Url))
+	}
+
+	// Start with existing webhook payload
+	// nolint:revive
+	updatedPayload := proto.Clone(webhook.Payload).(*storepb.ProjectWebhook)
+
+	for _, path := range req.Msg.UpdateMask.Paths {
+		switch path {
+		case "type":
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.Errorf("type cannot be updated"))
+		case "title":
+			updatedPayload.Title = req.Msg.Webhook.Title
+		case "url":
+			updatedPayload.Url = req.Msg.Webhook.Url
+			// Validate webhook URL against allowed domains
+			if err := webhookplugin.ValidateWebhookURL(updatedPayload.Type, updatedPayload.Url); err != nil {
+				return nil, connect.NewError(connect.CodeInvalidArgument, errors.Wrapf(err, "invalid webhook URL"))
+			}
+		case "notification_type":
+			types, err := convertToStoreActivityTypes(req.Msg.Webhook.NotificationTypes)
+			if err != nil {
+				return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			}
+			if len(types) == 0 {
+				return nil, connect.NewError(connect.CodeInvalidArgument, errors.Errorf("notification types should not be empty"))
+			}
+			updatedPayload.Activities = types
+		case "direct_message":
+			updatedPayload.DirectMessage = req.Msg.Webhook.DirectMessage
+		default:
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.Errorf("invalid field %q", path))
+		}
+	}
+
+	update := &store.UpdateProjectWebhookMessage{
+		Payload: updatedPayload,
+	}
+
+	if _, err := s.store.UpdateProjectWebhook(ctx, project.ResourceID, webhook.ResourceID, update); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	project, err = s.store.GetProject(ctx, &store.FindProjectMessage{
+		Workspace:  workspaceID,
+		ResourceID: &projectID,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(convertToProject(project)), nil
+}
+
+// RemoveWebhook removes a webhook from a given project.
+func (s *ProjectService) RemoveWebhook(ctx context.Context, req *connect.Request[v1pb.RemoveWebhookRequest]) (*connect.Response[v1pb.Project], error) {
+	projectID, webhookID, err := common.GetProjectIDWebhookID(req.Msg.Webhook.Name)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
+	workspaceID := common.GetWorkspaceIDFromContext(ctx)
+	project, err := s.store.GetProject(ctx, &store.FindProjectMessage{
+		Workspace:  workspaceID,
+		ResourceID: &projectID,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if project == nil {
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("project %q not found", webhookID))
+	}
+	if project.Deleted {
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("project %q has been deleted", projectID))
+	}
+
+	webhook, err := s.store.GetProjectWebhook(ctx, &store.FindProjectWebhookMessage{
+		ProjectID:  &project.ResourceID,
+		ResourceID: &webhookID,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if webhook == nil {
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("webhook %q not found", req.Msg.Webhook.Url))
+	}
+
+	if err := s.store.DeleteProjectWebhook(ctx, project.ResourceID, webhook.ResourceID); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	project, err = s.store.GetProject(ctx, &store.FindProjectMessage{
+		Workspace:  workspaceID,
+		ResourceID: &projectID,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(convertToProject(project)), nil
+}
+
+// TestWebhook tests a webhook.
+func (s *ProjectService) TestWebhook(ctx context.Context, req *connect.Request[v1pb.TestWebhookRequest]) (*connect.Response[v1pb.TestWebhookResponse], error) {
+	externalURL, err := utils.GetEffectiveExternalURL(ctx, s.store, s.profile, common.GetWorkspaceIDFromContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+
+	projectID, err := common.GetProjectID(req.Msg.Project)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	project, err := s.store.GetProject(ctx, &store.FindProjectMessage{
+		Workspace:  common.GetWorkspaceIDFromContext(ctx),
+		ResourceID: &projectID,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if project == nil {
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("project %q not found", req.Msg.Project))
+	}
+	if project.Deleted {
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("project %q has been deleted", req.Msg.Project))
+	}
+
+	webhook, err := convertToStoreProjectWebhookMessage(req.Msg.Webhook)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
+	// Validate webhook URL against allowed domains
+	if err := webhookplugin.ValidateWebhookURL(webhook.Payload.GetType(), webhook.Payload.GetUrl()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.Wrapf(err, "invalid webhook URL"))
+	}
+
+	user, ok := GetUserFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeInternal, errors.Errorf("user not found"))
+	}
+
+	userMessage, err := s.store.GetUserByEmail(ctx, user.Email)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, errors.Wrapf(err, "failed to get user"))
+	}
+	if userMessage == nil {
+		return nil, connect.NewError(connect.CodeInternal, errors.Errorf("user not found for email %q", user.Email))
+	}
+
+	resp := &v1pb.TestWebhookResponse{}
+	err = webhookplugin.Post(
+		webhook.Payload.GetType(),
+		webhookplugin.Context{
+			URL:         webhook.Payload.GetUrl(),
+			Level:       webhookplugin.WebhookInfo,
+			EventType:   storepb.Activity_ISSUE_CREATED.String(),
+			Title:       fmt.Sprintf("Test webhook %q", webhook.Payload.GetTitle()),
+			TitleZh:     fmt.Sprintf("测试 webhook %q", webhook.Payload.GetTitle()),
+			Description: "This is a test",
+			Link:        fmt.Sprintf("%s/projects/%s/webhooks/%s", externalURL, project.ResourceID, fmt.Sprintf("%s-%s", slug.Make(webhook.Payload.GetTitle()), webhook.ResourceID)),
+			ActorID:     userMessage.ID,
+			ActorName:   userMessage.Name,
+			ActorEmail:  userMessage.Email,
+			CreatedTS:   time.Now().Unix(),
+			Issue: &webhookplugin.Issue{
+				ID:          1,
+				Name:        "Test issue",
+				Status:      "OPEN",
+				Type:        "bb.issue.database.create",
+				Description: "This is a test issue",
+				Creator: webhookplugin.Creator{
+					Name:  userMessage.Name,
+					Email: userMessage.Email,
+				},
+			},
+
+			Project: &webhookplugin.Project{
+				Name:  common.FormatProject(project.ResourceID),
+				Title: project.Title,
+			},
+		},
+	)
+	if err != nil {
+		resp.Error = err.Error()
+	}
+
+	return connect.NewResponse(resp), nil
+}
+
+func (s *ProjectService) getProjectMessage(ctx context.Context, name string) (*store.ProjectMessage, error) {
+	projectID, err := common.GetProjectID(name)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
+	find := &store.FindProjectMessage{
+		Workspace:   common.GetWorkspaceIDFromContext(ctx),
+		ResourceID:  &projectID,
+		ShowDeleted: true,
+	}
+	project, err := s.store.GetProject(ctx, find)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if project == nil {
+		return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("project %q not found", name))
+	}
+
+	return project, nil
+}
+
+func getBindingIdentifier(role string, condition *expr.Expr) string {
+	ids := []string{
+		fmt.Sprintf("[role] %s", role),
+	}
+	if condition != nil {
+		ids = append(
+			ids,
+			fmt.Sprintf("[title] %s", condition.Title),
+			fmt.Sprintf("[description] %s", condition.Description),
+			fmt.Sprintf("[expression] %s", condition.Expression),
+		)
+	}
+	return strings.Join(ids, ";")
+}
+
+func validateIAMPolicy(
+	ctx context.Context,
+	stores *store.Store,
+	allowAllUsers bool,
+	msg *v1pb.SetIamPolicyRequest,
+	oldPolicyMessage *store.IamPolicyMessage,
+) error {
+	if msg.Policy == nil {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("IAM Policy is required"))
+	}
+	if len(msg.Policy.Bindings) == 0 {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("IAM Binding is empty"))
+	}
+
+	workspaceProfileSetting, err := stores.GetWorkspaceProfileSetting(ctx, common.GetWorkspaceIDFromContext(ctx))
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, errors.New("failed to get workspace profile setting"))
+	}
+	var maximumRoleExpiration *durationpb.Duration
+	if workspaceProfileSetting != nil {
+		maximumRoleExpiration = workspaceProfileSetting.MaximumRoleExpiration
+	}
+
+	roleMessages, err := stores.ListRoles(ctx, &store.FindRoleMessage{Workspace: common.GetWorkspaceIDFromContext(ctx)})
+	if err != nil {
+		return connect.NewError(connect.CodeInternal, errors.Wrapf(err, "failed to list roles"))
+	}
+
+	existingBindings := make(map[string]bool)
+	for _, oldBinding := range oldPolicyMessage.Policy.Bindings {
+		identifier := getBindingIdentifier(oldBinding.Role, oldBinding.Condition)
+		existingBindings[identifier] = true
+	}
+
+	bindings := []*v1pb.Binding{}
+	for _, binding := range msg.Policy.Bindings {
+		if len(binding.Members) == 0 {
+			continue
+		}
+
+		identifier := getBindingIdentifier(binding.Role, binding.Condition)
+		if !existingBindings[identifier] {
+			bindings = append(bindings, binding)
+		}
+	}
+
+	// If allUsers is not allowed in IAM policies, members must be explicitly added.
+	if !allowAllUsers {
+		for _, binding := range bindings {
+			for _, member := range binding.Members {
+				if member == common.AllUsers {
+					return connect.NewError(connect.CodeInvalidArgument,
+						errors.New("allUsers is not allowed in workspace IAM policy in SaaS mode, add members explicitly"))
+				}
+			}
+		}
+	}
+
+	return validateBindings(msg.Resource, bindings, roleMessages, maximumRoleExpiration)
+}
+
+func validateBindings(
+	parent string,
+	bindings []*v1pb.Binding,
+	roles []*store.RoleMessage,
+	maximumRoleExpiration *durationpb.Duration,
+) error {
+	existingRoles := make(map[string]bool)
+	for _, role := range roles {
+		existingRoles[common.FormatRole(role.ResourceID)] = true
+	}
+
+	for _, binding := range bindings {
+		if binding.Role == "" {
+			return connect.NewError(connect.CodeInvalidArgument, errors.New("IAM Binding role is required"))
+		}
+		if !existingRoles[binding.Role] {
+			return connect.NewError(connect.CodeInvalidArgument, errors.Errorf("IAM Binding role %s does not exist", binding.Role))
+		}
+
+		if !strings.HasPrefix(parent, common.ProjectNamePrefix) {
+			continue
+		}
+
+		if _, err := common.ValidateProjectMemberCELExpr(binding.Condition); err != nil {
+			return err
+		}
+
+		if binding.Role != fmt.Sprintf("roles/%s", store.ProjectOwnerRole) && maximumRoleExpiration != nil {
+			// Only validate when maximumRoleExpiration is set and the role is not project owner.
+			if err := validateExpirationInExpression(binding.GetCondition().GetExpression(), maximumRoleExpiration); err != nil {
+				return connect.NewError(connect.CodeInvalidArgument, errors.Wrapf(err, "failed to validate expiration for binding %v", binding.Role))
+			}
+		}
+	}
+	return nil
+}
+
+// validateExpirationInExpression validates the IAM policy expression.
+// Currently only validate the following expression:
+// * request.time < timestamp("2021-01-01T00:00:00Z")
+//
+// Other expressions will be ignored.
+func validateExpirationInExpression(expr string, maximumRoleExpiration *durationpb.Duration) error {
+	if maximumRoleExpiration == nil {
+		return nil
+	}
+	if !strings.Contains(expr, "request.time") {
+		return errors.Errorf("request.time is required")
+	}
+	e, err := cel.NewEnv()
+	if err != nil {
+		return errors.Wrap(err, "failed to create cel environment")
+	}
+	ast, iss := e.Parse(expr)
+	if iss != nil {
+		return errors.Wrap(iss.Err(), "failed to parse expression")
+	}
+
+	var validator func(expr celast.Expr) error
+
+	validator = func(expr celast.Expr) error {
+		switch expr.Kind() {
+		case celast.CallKind:
+			functionName := expr.AsCall().FunctionName()
+			switch functionName {
+			case "_||_":
+				for _, arg := range expr.AsCall().Args() {
+					err := validator(arg)
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			case "_&&_":
+				for _, arg := range expr.AsCall().Args() {
+					err := validator(arg)
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			// Only handle "request.time < timestamp("2021-01-01T00:00:00Z").
+			case "_<_":
+				var value string
+				for _, arg := range expr.AsCall().Args() {
+					switch arg.Kind() {
+					case celast.SelectKind:
+						variable := fmt.Sprintf("%s.%s", arg.AsSelect().Operand().AsIdent(), arg.AsSelect().FieldName())
+						if variable != "request.time" {
+							return errors.Errorf("unexpected variable %v", variable)
+						}
+					case celast.CallKind:
+						functionName := arg.AsCall().FunctionName()
+						if functionName != "timestamp" {
+							return errors.Errorf("unexpected function %v", functionName)
+						}
+						if len(arg.AsCall().Args()) != 1 {
+							return errors.Errorf("unexpected number of arguments %d", len(arg.AsCall().Args()))
+						}
+						valueArg := arg.AsCall().Args()[0]
+						if valueArg.Kind() != celast.LiteralKind {
+							return errors.Errorf("unexpected argument kind %v", valueArg.Kind())
+						}
+						lit, ok := valueArg.AsLiteral().Value().(string)
+						if !ok {
+							return errors.Errorf("expect string, got %T, hint: filter literals should be string", arg.AsLiteral().Value())
+						}
+						value = lit
+					default:
+						// Other arg kinds
+					}
+				}
+
+				t, err := time.Parse(time.RFC3339, value)
+				if err != nil {
+					return errors.Errorf("failed to parse time %v, error: %v", value, err)
+				}
+				maxExpirationTime := time.Now().Add(maximumRoleExpiration.AsDuration())
+				if t.After(maxExpirationTime) {
+					return errors.Errorf("time %s exceeds maximum role expiration %s", t.Format(time.DateTime), maxExpirationTime.Format(time.DateTime))
+				}
+				return nil
+			default:
+				// Ignore other functions.
+				return nil
+			}
+		default:
+			// Ignore other kinds.
+			return nil
+		}
+	}
+
+	return validator(ast.NativeRep().Expr())
+}
+
+func validateMember(member string) error {
+	if member == common.AllUsers {
+		return nil
+	}
+
+	validPrefixes := []string{
+		common.UserBindingPrefix,
+		common.GroupBindingPrefix,
+		common.ServiceAccountBindingPrefix,
+		common.WorkloadIdentityBindingPrefix,
+	}
+	for _, prefix := range validPrefixes {
+		if strings.HasPrefix(member, prefix) && len(member[len(prefix):]) > 0 {
+			return nil
+		}
+	}
+	return errors.Errorf("invalid member %s", member)
+}

@@ -58,6 +58,18 @@ type Profile struct {
 	// RuntimeEnableAuditLogStdout enables audit logging to stdout in structured JSON format.
 	// can be set in runtime via workspace setting
 	RuntimeEnableAuditLogStdout atomic.Bool
+
+	// --- Enterprise Feature Flags ---
+
+	// DurableBus enables the PG-backed durable message bus instead of in-memory channels.
+	// Requires bus_queue table (migration 3.18/0001). Default: false (in-memory bus).
+	DurableBus bool
+	// CacheBackend selects the cache implementation: "lru" (default), "redis", "noop".
+	CacheBackend string
+	// CacheRedisURL is the Redis/Valkey connection URL when CacheBackend is "redis".
+	CacheRedisURL string
+	// DualPool enables API/Runner connection pool isolation. Default: false (single pool).
+	DualPool bool
 }
 
 // UseEmbedDB returns whether to use embedDB.

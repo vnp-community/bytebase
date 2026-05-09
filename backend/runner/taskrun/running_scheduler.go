@@ -36,7 +36,7 @@ func (s *Scheduler) runRunningTaskRunsScheduler(ctx context.Context, wg *sync.Wa
 			if err := s.scheduleRunningTaskRuns(ctx); err != nil {
 				slog.Error("failed to schedule running task runs", log.BBError(err))
 			}
-		case <-s.bus.TaskRunTickleChan:
+		case <-s.bus.TaskRunChan():
 			if err := s.licenseService.CheckReplicaLimit(ctx); err != nil {
 				continue
 			}
@@ -123,12 +123,12 @@ func (s *Scheduler) runTaskRunOnce(ctx context.Context, taskRunUID int64, task *
 	}()
 	taskRunRef := bus.TaskRunRef{ProjectID: task.ProjectID, ID: taskRunUID}
 	defer func() {
-		s.bus.RunningTaskRunsCancelFunc.Delete(taskRunRef)
+		s.bus.DeregisterTaskRunCancel(taskRunRef)
 	}()
 
 	driverCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	s.bus.RunningTaskRunsCancelFunc.Store(taskRunRef, cancel)
+	s.bus.RegisterTaskRunCancel(taskRunRef, cancel)
 
 	result, err := RunExecutorOnce(ctx, driverCtx, executor, task, taskRunUID)
 
@@ -223,7 +223,7 @@ func (s *Scheduler) runTaskRunOnce(ctx context.Context, taskRunUID int64, task *
 	}
 
 	// Signal to check if plan is complete and successful (may send PIPELINE_COMPLETED)
-	s.bus.PlanCompletionCheckChan <- bus.PlanRef{ProjectID: task.ProjectID, PlanID: task.PlanID}
+	s.bus.RequestPlanCompletionCheck(bus.PlanRef{ProjectID: task.ProjectID, PlanID: task.PlanID})
 }
 
 // validateTaskFreshness checks for state drift between task creation and execution time.

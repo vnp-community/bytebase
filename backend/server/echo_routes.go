@@ -26,6 +26,7 @@ import (
 
 func configureEchoRouters(
 	e *echo.Echo,
+	s *Server,
 	lspServer *lsp.Server,
 	directorySyncServer *directorysync.Service,
 	oauth2Service *oauth2.Service,
@@ -72,9 +73,11 @@ func configureEchoRouters(
 		Gatherer: registry,
 	}))
 
-	e.GET("/healthz", func(c *echo.Context) error {
-		return c.String(http.StatusOK, "OK")
-	})
+	// Health check endpoints (deep health with component reporting).
+	checker := newHealthChecker(s)
+	e.GET("/healthz", checker.healthzHandler)
+	e.GET("/readyz", checker.readyzHandler)
+	e.GET("/livez", checker.livezHandler)
 
 	// LSP server.
 	e.GET(lspAPI, lspServer.Router)

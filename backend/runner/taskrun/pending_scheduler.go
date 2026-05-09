@@ -38,7 +38,7 @@ func (s *Scheduler) runPendingTaskRunsScheduler(ctx context.Context, wg *sync.Wa
 			if err := s.schedulePendingTaskRuns(ctx); err != nil {
 				slog.Error("failed to schedule pending task runs", log.BBError(err))
 			}
-		case <-s.bus.TaskRunTickleChan:
+		case <-s.bus.TaskRunChan():
 			if err := s.licenseService.CheckReplicaLimit(ctx); err != nil {
 				// Grace period is tracked by the ticker branch; just skip here.
 				continue
@@ -191,10 +191,7 @@ func (s *Scheduler) promoteTaskRun(ctx context.Context, taskRun *store.TaskRunMe
 		return errors.Wrapf(err, "failed to update task run status to available")
 	}
 
-	select {
-	case s.bus.TaskRunTickleChan <- 0:
-	default:
-	}
+	s.bus.TickleTaskRun()
 
 	return nil
 }

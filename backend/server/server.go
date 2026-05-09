@@ -79,9 +79,11 @@ type Server struct {
 	echoServer *echo.Echo
 	httpServer *http.Server
 	lspServer  *lsp.Server
-	store      *store.Store
-	dbFactory  *dbfactory.DBFactory
-	startedTS  int64
+	store       *store.Store
+	dbFactory   *dbfactory.DBFactory
+	registry    *ComponentRegistry
+	poolManager *store.PoolManager
+	startedTS   int64
 
 	// PG server stoppers.
 	stopper []func()
@@ -98,6 +100,7 @@ func NewServer(ctx context.Context, profile *config.Profile) (*Server, error) {
 	s := &Server{
 		profile:   profile,
 		startedTS: time.Now().Unix(),
+		registry:  NewComponentRegistry(),
 	}
 
 	// Display config
@@ -153,6 +156,12 @@ func NewServer(ctx context.Context, profile *config.Profile) (*Server, error) {
 		return nil, errors.Wrapf(err, "failed to migrate schema")
 	}
 	s.store = stores
+	// Apply feature-flagged Store options (dual pool, cache backend).
+	poolManager, err := applyStoreOptions(ctx, stores, profile)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to apply store options")
+	}
+	s.poolManager = poolManager
 	sheetManager := sheet.NewManager()
 
 	s.licenseService, err = enterprise.NewLicenseService(profile.Mode, stores, profile.SaaS, profile.LicensePrivateKey)
@@ -252,7 +261,7 @@ func NewServer(ctx context.Context, profile *config.Profile) (*Server, error) {
 	if err := configureGrpcRouters(ctx, s.echoServer, s.store, sheetManager, s.dbFactory, s.licenseService, s.profile, s.bus, s.schemaSyncer, s.webhookManager, s.iamManager, secret, s.sampleInstanceManager); err != nil {
 		return nil, errors.Wrapf(err, "failed to configure gRPC routers")
 	}
-	configureEchoRouters(s.echoServer, s.lspServer, directorySyncServer, oauth2Service, mcpServer, stripeWebhookHandler, profile)
+	configureEchoRouters(s.echoServer, s, s.lspServer, directorySyncServer, oauth2Service, mcpServer, stripeWebhookHandler, profile)
 
 	serverStarted = true
 	return s, nil
@@ -331,6 +340,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	// Wait for all runners to exit.
 	s.runnerWG.Wait()
+
+	// Close pool manager (dual pool)
+	if s.poolManager != nil {
+		if err := s.poolManager.Close(); err != nil {
+			slog.Error("Failed to close pool manager", log.BBError(err))
+		}
+	}
 
 	// Close db connection
 	if s.store != nil {

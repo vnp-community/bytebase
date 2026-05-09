@@ -32,7 +32,7 @@ func NewRolloutCreator(store *store.Store, bus *bus.Bus, webhookManager *webhook
 }
 
 // Run starts the rollout creator listening to the channel.
-func (rc *RolloutCreator) Run(ctx context.Context, wg *sync.WaitGroup, rolloutCreationChan chan bus.PlanRef) {
+func (rc *RolloutCreator) Run(ctx context.Context, wg *sync.WaitGroup, rolloutCreationChan <-chan bus.PlanRef) {
 	defer wg.Done()
 	slog.Debug("Rollout creator started")
 
@@ -184,7 +184,7 @@ func (rc *RolloutCreator) tryCreateRollout(ctx context.Context, ref bus.PlanRef)
 	}
 
 	// Tickle task run scheduler
-	rc.bus.TaskRunTickleChan <- 0
+	rc.bus.TickleTaskRun()
 
 	slog.Info("successfully auto-created rollout", slog.String("project", ref.ProjectID), slog.Int("plan_id", int(planID)))
 }

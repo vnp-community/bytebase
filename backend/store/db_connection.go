@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bytebase/bytebase/backend/common/qb"
+	"github.com/bytebase/bytebase/backend/common/resilience"
 )
 
 // DBConnectionManager manages database connections with support for dynamic updates.
@@ -24,6 +25,7 @@ type DBConnectionManager struct {
 	pgURLOrFile string // Either a PostgreSQL URL or a file path
 	watcher     *fsnotify.Watcher
 	stopWatcher chan struct{}
+	reconnectCB *resilience.CircuitBreaker // Protects against reconnection storms
 }
 
 // NewDBConnectionManager creates a new database connection manager.
@@ -31,6 +33,11 @@ func NewDBConnectionManager(pgURLOrFile string) *DBConnectionManager {
 	return &DBConnectionManager{
 		pgURLOrFile: pgURLOrFile,
 		stopWatcher: make(chan struct{}),
+		reconnectCB: resilience.NewCircuitBreaker(resilience.CircuitBreakerConfig{
+			Name:         "db-reconnect",
+			MaxFailures:  3,
+			ResetTimeout: 30 * time.Second,
+		}),
 	}
 }
 
@@ -72,6 +79,12 @@ func (m *DBConnectionManager) Initialize(ctx context.Context) error {
 // GetDB returns the current database connection.
 func (m *DBConnectionManager) GetDB() *sql.DB {
 	return m.db
+}
+
+// GetPgURL returns the PostgreSQL URL or file path used for connections.
+// When a file path was provided, this returns the file path (not the resolved URL).
+func (m *DBConnectionManager) GetPgURL() string {
+	return m.pgURLOrFile
 }
 
 // Close stops the file watcher and closes the database connection.
@@ -134,14 +147,33 @@ func (m *DBConnectionManager) watchFile(ctx context.Context, filePath string) {
 }
 
 // reloadConnection reads the updated file and swaps the database connection.
+// Protected by a circuit breaker to prevent reconnection storms when PG is unavailable.
 func (m *DBConnectionManager) reloadConnection(ctx context.Context, filePath string) {
+	err := m.reconnectCB.Execute(ctx, func(ctx context.Context) error {
+		return resilience.Retry(ctx, "db-reconnect", resilience.RetryConfig{
+			MaxRetries:   3,
+			InitialDelay: 500 * time.Millisecond,
+			MaxDelay:     10 * time.Second,
+			Multiplier:   2.0,
+			Jitter:       true,
+		}, func(ctx context.Context) error {
+			return m.doReloadConnection(ctx, filePath)
+		})
+	})
+	if err != nil {
+		slog.Error("Database reconnection failed (circuit breaker may be open)",
+			"error", err, "file", filePath)
+	}
+}
+
+// doReloadConnection performs the actual connection swap.
+func (m *DBConnectionManager) doReloadConnection(ctx context.Context, filePath string) error {
 	// Small delay to ensure file write is complete
 	time.Sleep(100 * time.Millisecond)
 
 	newURL, err := readURLFromFile(filePath)
 	if err != nil {
-		slog.Error("Failed to read updated PG URL file", "error", err, "file", filePath)
-		return
+		return errors.Wrap(err, "failed to read updated PG URL file")
 	}
 
 	slog.Info("PG URL file content updated, reconnecting database")
@@ -149,8 +181,7 @@ func (m *DBConnectionManager) reloadConnection(ctx context.Context, filePath str
 	// Create new connection first (zero downtime)
 	newDB, err := createConnectionWithTracer(ctx, newURL)
 	if err != nil {
-		slog.Error("Failed to create new database connection", "error", err)
-		return
+		return errors.Wrap(err, "failed to create new database connection")
 	}
 
 	// Swap connections atomically
@@ -176,6 +207,7 @@ func (m *DBConnectionManager) reloadConnection(ctx context.Context, filePath str
 	}
 
 	slog.Info("Database connection updated successfully", "file", filePath)
+	return nil
 }
 
 // Helper functions

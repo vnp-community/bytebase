@@ -56,7 +56,7 @@ func (s *Scheduler) Run(ctx context.Context, wg *sync.WaitGroup) {
 				continue
 			}
 			s.runOnce(ctx)
-		case <-s.bus.PlanCheckTickleChan:
+		case <-s.bus.PlanCheckChan():
 			if err := s.licenseService.CheckReplicaLimit(ctx); err != nil {
 				slog.Warn("Plan check scheduler skipped due to HA license restriction", log.BBError(err))
 				continue
@@ -94,8 +94,8 @@ func (s *Scheduler) runPlanCheckRun(ctx context.Context, projectID string, uid i
 	ctxWithCancel, cancel := context.WithCancel(ctx)
 	defer cancel()
 	planCheckRef := bus.PlanCheckRunRef{ProjectID: projectID, UID: uid}
-	s.bus.RunningPlanCheckRunsCancelFunc.Store(planCheckRef, cancel)
-	defer s.bus.RunningPlanCheckRunsCancelFunc.Delete(planCheckRef)
+	s.bus.RegisterPlanCheckCancel(planCheckRef, cancel)
+	defer s.bus.DeregisterPlanCheckCancel(planCheckRef)
 
 	// Fetch plan to derive check targets at runtime
 	plan, err := s.store.GetPlan(ctxWithCancel, &store.FindPlanMessage{ProjectID: projectID, UID: &planUID})
@@ -177,7 +177,7 @@ func (s *Scheduler) markPlanCheckRunDone(ctx context.Context, projectID string, 
 	}
 	if issue != nil && issue.PlanUID != nil {
 		// Trigger approval finding.
-		s.bus.ApprovalCheckChan <- bus.IssueRef{ProjectID: projectID, UID: issue.UID}
+		s.bus.RequestApprovalCheck(bus.IssueRef{ProjectID: projectID, UID: issue.UID})
 	}
 }
 

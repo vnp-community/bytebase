@@ -81,7 +81,7 @@ func postCreateIssue(
 			return nil, errors.Wrapf(err, "failed to complete role grant")
 		}
 	case storepb.Issue_DATABASE_CHANGE:
-		b.ApprovalCheckChan <- bus.IssueRef{ProjectID: issue.ProjectID, UID: issue.UID}
+		b.RequestApprovalCheck(bus.IssueRef{ProjectID: issue.ProjectID, UID: issue.UID})
 	default:
 	}
 

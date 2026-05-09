@@ -26,14 +26,14 @@ import (
 
 // ACLInterceptor is the v1 ACL interceptor for gRPC server.
 type ACLInterceptor struct {
-	store      *store.Store
+	store      store.DataStore
 	secret     string
 	iamManager *iam.Manager
 	profile    *config.Profile
 }
 
 // NewACLInterceptor returns a new v1 API ACL interceptor.
-func NewACLInterceptor(store *store.Store, secret string, iamManager *iam.Manager, profile *config.Profile) *ACLInterceptor {
+func NewACLInterceptor(store store.DataStore, secret string, iamManager *iam.Manager, profile *config.Profile) *ACLInterceptor {
 	return &ACLInterceptor{
 		store:      store,
 		secret:     secret,
@@ -308,7 +308,7 @@ var instanceRegex = regexp.MustCompile(`^instances/[^/]+`)
 //
 // All instance/database lookups use the workspace ID from the request context,
 // ensuring the resource belongs to the caller's workspace before any permission check.
-func populateRawResources(ctx context.Context, stores *store.Store, request any, method string) ([]*common.Resource, error) {
+func populateRawResources(ctx context.Context, stores store.DataStore, request any, method string) ([]*common.Resource, error) {
 	rawNames, err := getResourceFromRequest(ctx, request, method)
 	if err != nil {
 		return nil, err

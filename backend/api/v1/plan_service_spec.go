@@ -1,0 +1,735 @@
+package v1
+
+import (
+	"context"
+	"slices"
+
+	"connectrpc.com/connect"
+	"github.com/pkg/errors"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/bytebase/bytebase/backend/common"
+	storepb "github.com/bytebase/bytebase/backend/generated-go/store"
+	v1pb "github.com/bytebase/bytebase/backend/generated-go/v1"
+	"github.com/bytebase/bytebase/backend/runner/plancheck"
+	"github.com/bytebase/bytebase/backend/store"
+)
+
+func validateSpecs(ctx context.Context, s *store.Store, projectID string, specs []*v1pb.Plan_Spec) (*v1pb.DatabaseGroup, error) {
+	if len(specs) == 0 {
+		return nil, errors.Errorf("the plan has zero spec")
+	}
+	configTypeCount := map[string]int{}
+	seenID := map[string]bool{}
+
+	var releaseCount, sheetCount int
+	var sheetSha256s []string
+	var releaseString string
+	var instanceIDs []string
+	var databaseGroups []string
+	var databaseNames []string
+	var databaseGroup *v1pb.DatabaseGroup
+
+	for _, spec := range specs {
+		id := spec.GetId()
+		if id == "" {
+			return nil, errors.Errorf("spec id cannot be empty")
+		}
+		if seenID[id] {
+			return nil, errors.Errorf("found duplicate spec id %v", id)
+		}
+		seenID[id] = true
+
+		switch config := spec.Config.(type) {
+		case *v1pb.Plan_Spec_CreateDatabaseConfig:
+			configTypeCount["create_database"]++
+			if target := config.CreateDatabaseConfig.Target; target != "" {
+				instanceID, err := common.GetInstanceID(target)
+				if err != nil {
+					return nil, connect.NewError(connect.CodeInvalidArgument, errors.Errorf("invalid instance name %q: %v", target, err))
+				}
+				instanceIDs = append(instanceIDs, instanceID)
+			}
+		case *v1pb.Plan_Spec_ChangeDatabaseConfig:
+			configTypeCount["change_database"]++
+			var databaseTarget, databaseGroupTarget int
+			for _, target := range config.ChangeDatabaseConfig.Targets {
+				if _, _, err := common.GetInstanceDatabaseID(target); err == nil {
+					databaseTarget++
+					databaseNames = append(databaseNames, target)
+				} else if _, _, err := common.GetProjectIDDatabaseGroupID(target); err == nil {
+					databaseGroupTarget++
+					databaseGroups = append(databaseGroups, target)
+				} else {
+					return nil, errors.Errorf("invalid target %v", target)
+				}
+			}
+			// Disallow mixing database and database group targets in the same spec.
+			if databaseTarget > 0 && databaseGroupTarget > 0 {
+				return nil, errors.Errorf("found databaseTarget and databaseGroupTarget, expect only one kind")
+			}
+			// Track if this spec uses release or sheet.
+			if config.ChangeDatabaseConfig.Release != "" {
+				releaseCount++
+				releaseString = config.ChangeDatabaseConfig.Release
+			}
+			if config.ChangeDatabaseConfig.Sheet != "" {
+				sheetCount++
+				if _, sha, err := common.GetProjectResourceIDSheetSha256(config.ChangeDatabaseConfig.Sheet); err == nil {
+					sheetSha256s = append(sheetSha256s, sha)
+				}
+			}
+		case *v1pb.Plan_Spec_ExportDataConfig:
+			configTypeCount["export_data"]++
+			for _, target := range config.ExportDataConfig.Targets {
+				if _, _, err := common.GetInstanceDatabaseID(target); err == nil {
+					databaseNames = append(databaseNames, target)
+				} else if _, _, err := common.GetProjectIDDatabaseGroupID(target); err == nil {
+					databaseGroups = append(databaseGroups, target)
+				} else {
+					return nil, errors.Errorf("invalid target %v", target)
+				}
+			}
+			if config.ExportDataConfig.Sheet != "" {
+				if _, sha, err := common.GetProjectResourceIDSheetSha256(config.ExportDataConfig.Sheet); err == nil {
+					sheetSha256s = append(sheetSha256s, sha)
+				}
+			}
+		default:
+			return nil, errors.Errorf("invalid spec type")
+		}
+	}
+	if len(configTypeCount) > 1 {
+		return nil, errors.Errorf("plan contains multiple types of spec configurations (%v), but each plan must contain only one type", len(configTypeCount))
+	}
+	// Disallow mixing ChangeDatabaseConfig specs with release and sheet.
+	if releaseCount > 0 && sheetCount > 0 {
+		return nil, errors.Errorf("plan contains both release and sheet based change database configs, but each plan must use only one approach")
+	}
+	// Allow at most one ChangeDatabaseConfig with release.
+	if releaseCount > 1 {
+		return nil, errors.Errorf("plan contains multiple change database configs with release, but only one is allowed")
+	}
+
+	// Allow at most one instance.
+	if len(instanceIDs) > 1 {
+		return nil, errors.Errorf("plan contains targets on multiple instances, but only one instance is allowed")
+	}
+
+	// Allow at most one database group.
+	if len(databaseGroups) > 1 {
+		return nil, errors.Errorf("plan contains multiple database groups, but only one is allowed")
+	}
+
+	// Don't allow mixing database group and databases.
+	if len(databaseGroups) > 0 && len(databaseNames) > 0 {
+		return nil, errors.Errorf("plan contains both database group and databases, but only one is allowed")
+	}
+
+	// Validate resources existence.
+	if len(instanceIDs) == 1 {
+		instanceID := instanceIDs[0]
+		instance, err := s.GetInstance(ctx, &store.FindInstanceMessage{
+			Workspace:  common.GetWorkspaceIDFromContext(ctx),
+			ResourceID: &instanceID,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, errors.Errorf("failed to get instance %q: %v", instanceID, err))
+		}
+		if instance == nil {
+			return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("instance %q not found", instanceID))
+		}
+	}
+
+	if len(databaseGroups) == 1 {
+		name := databaseGroups[0]
+		groupProjectID, _, err := common.GetProjectIDDatabaseGroupID(name)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.Errorf("invalid database group name %q", name))
+		}
+		if groupProjectID != projectID {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.Errorf("database group %q (project %q) does not belong to plan project %q", name, groupProjectID, projectID))
+		}
+
+		dg, err := getDatabaseGroupByName(ctx, s, name, v1pb.DatabaseGroupView_DATABASE_GROUP_VIEW_FULL)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, errors.Errorf("failed to get database group %q: %v", name, err))
+		}
+		if dg == nil {
+			return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("database group %q not found", name))
+		}
+		databaseGroup = dg
+	}
+
+	for _, name := range databaseNames {
+		instanceID, dbName, err := common.GetInstanceDatabaseID(name)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.Errorf("invalid database name %q", name))
+		}
+		db, err := s.GetDatabase(ctx, &store.FindDatabaseMessage{
+			Workspace:    common.GetWorkspaceIDFromContext(ctx),
+			InstanceID:   &instanceID,
+			DatabaseName: &dbName,
+		})
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, errors.Errorf("failed to get database %q: %v", name, err))
+		}
+		if db == nil {
+			return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("database %q not found", name))
+		}
+
+		if db.ProjectID != projectID {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.Errorf("database %q (project %q) does not belong to plan project %q", name, db.ProjectID, projectID))
+		}
+	}
+
+	// Validate sheets existence.
+	if len(sheetSha256s) > 0 {
+		exist, err := s.HasSheets(ctx, sheetSha256s...)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, errors.Errorf("failed to check sheets: %v", err))
+		}
+		if !exist {
+			return nil, connect.NewError(connect.CodeNotFound, errors.Errorf("some sheets are not found"))
+		}
+	}
+
+	// Validate release existence.
+	if releaseString != "" {
+		releaseProjectID, releaseID, err := common.GetProjectReleaseID(releaseString)
+		if err != nil {
+			return nil, errors.Errorf("invalid release name %q", releaseString)
+		}
+		if releaseProjectID != projectID {
+			return nil, errors.Errorf("release %q (project %q) does not belong to plan project %q", releaseString, releaseProjectID, projectID)
+		}
+		release, err := s.GetRelease(ctx, &store.FindReleaseMessage{
+			ProjectID: &releaseProjectID,
+			ReleaseID: &releaseID,
+		})
+		if err != nil {
+			return nil, errors.Errorf("failed to get release %s: %v", releaseID, err)
+		}
+		if release == nil {
+			return nil, errors.Errorf("release %s not found", releaseID)
+		}
+	}
+	return databaseGroup, nil
+}
+
+func storePlanConfigHasRelease(plan *storepb.PlanConfig) bool {
+	for _, spec := range plan.GetSpecs() {
+		if c, ok := spec.Config.(*storepb.PlanConfig_Spec_ChangeDatabaseConfig); ok {
+			if c.ChangeDatabaseConfig.Release != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func storePlanConfigHasCreateDatabase(plan *storepb.PlanConfig) bool {
+	for _, spec := range plan.GetSpecs() {
+		if _, ok := spec.Config.(*storepb.PlanConfig_Spec_CreateDatabaseConfig); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// Converters section - ordered with callers before callees.
+
+// getPlanCheckRunFromPlan returns the plan check run for a plan.
+func getPlanCheckRunFromPlan(ctx context.Context, s *store.Store, project *store.ProjectMessage, plan *store.PlanMessage, databaseGroup *v1pb.DatabaseGroup) (*store.PlanCheckRunMessage, error) {
+	targets, err := plancheck.DeriveCheckTargets(ctx, s, project, plan, databaseGroup)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(targets) == 0 {
+		return nil, nil
+	}
+
+	return &store.PlanCheckRunMessage{
+		ProjectID: plan.ProjectID,
+		PlanUID:   plan.UID,
+		Status:    store.PlanCheckRunStatusRunning,
+	}, nil
+}
+
+func convertToPlans(ctx context.Context, s *store.Store, plans []*store.PlanMessage) ([]*v1pb.Plan, error) {
+	if len(plans) == 0 {
+		return nil, nil
+	}
+
+	type planKey struct {
+		projectID string
+		planUID   int64
+	}
+
+	workspaceID := common.GetWorkspaceIDFromContext(ctx)
+	planUIDs := make([]int64, 0, len(plans))
+	rolloutPlanUIDs := make([]int64, 0, len(plans))
+	projectIDSet := make(map[string]struct{}, len(plans))
+	for _, plan := range plans {
+		planUIDs = append(planUIDs, plan.UID)
+		if plan.Config != nil && plan.Config.HasRollout {
+			rolloutPlanUIDs = append(rolloutPlanUIDs, plan.UID)
+		}
+		projectIDSet[plan.ProjectID] = struct{}{}
+	}
+	projectIDs := make([]string, 0, len(projectIDSet))
+	for projectID := range projectIDSet {
+		projectIDs = append(projectIDs, projectID)
+	}
+
+	issues, err := s.ListIssues(ctx, &store.FindIssueMessage{
+		Workspace:  workspaceID,
+		ProjectIDs: projectIDs,
+		PlanUIDs:   &planUIDs,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to batch list issues")
+	}
+	issueByPlanKey := make(map[planKey]*store.IssueMessage, len(issues))
+	for _, issue := range issues {
+		if issue.PlanUID != nil {
+			issueByPlanKey[planKey{projectID: issue.ProjectID, planUID: *issue.PlanUID}] = issue
+		}
+	}
+
+	planCheckRuns, err := s.ListPlanCheckRuns(ctx, &store.FindPlanCheckRunMessage{
+		ProjectIDs: &projectIDs,
+		PlanUIDs:   &planUIDs,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to batch list plan check runs")
+	}
+	planCheckRunByPlanKey := make(map[planKey]*store.PlanCheckRunMessage, len(planCheckRuns))
+	for _, run := range planCheckRuns {
+		planCheckRunByPlanKey[planKey{projectID: run.ProjectID, planUID: run.PlanUID}] = run
+	}
+
+	taskStatusCountByPlanKey := make(map[planKey][]*store.TaskStatusCount)
+	environmentOrderMap := map[string]int{}
+	if len(rolloutPlanUIDs) > 0 {
+		environmentSetting, err := s.GetEnvironment(ctx, workspaceID)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get environments")
+		}
+		for i, env := range environmentSetting.GetEnvironments() {
+			environmentOrderMap[env.Id] = i
+		}
+
+		taskStatusCounts, err := s.ListTaskStatusCountByPlanIDs(ctx, projectIDs, rolloutPlanUIDs)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to batch list task status counts")
+		}
+		for _, count := range taskStatusCounts {
+			key := planKey{projectID: count.ProjectID, planUID: count.PlanID}
+			taskStatusCountByPlanKey[key] = append(taskStatusCountByPlanKey[key], count)
+		}
+	}
+
+	v1Plans := make([]*v1pb.Plan, len(plans))
+	for i, plan := range plans {
+		key := planKey{projectID: plan.ProjectID, planUID: plan.UID}
+		v1Plan := buildV1PlanFields(plan)
+
+		if issue := issueByPlanKey[key]; issue != nil {
+			v1Plan.Issue = common.FormatIssue(issue.ProjectID, issue.UID)
+			v1Plan.ApprovalStatus = computeApprovalStatus(issue.Payload.GetApproval())
+		}
+
+		if planCheckRun := planCheckRunByPlanKey[key]; planCheckRun != nil {
+			v1Plan.PlanCheckRunStatusCount[string(planCheckRun.Status)]++
+			for _, result := range planCheckRun.Result.Results {
+				v1Plan.PlanCheckRunStatusCount[storepb.Advice_Status_name[int32(result.Status)]]++
+			}
+		}
+
+		if counts := taskStatusCountByPlanKey[key]; len(counts) > 0 {
+			v1Plan.RolloutStageSummaries = buildRolloutStageSummaries(plan.ProjectID, plan.UID, counts, environmentOrderMap)
+		}
+
+		v1Plans[i] = v1Plan
+	}
+	return v1Plans, nil
+}
+
+func convertToPlan(ctx context.Context, s *store.Store, plan *store.PlanMessage) (*v1pb.Plan, error) {
+	plans, err := convertToPlans(ctx, s, []*store.PlanMessage{plan})
+	if err != nil {
+		return nil, err
+	}
+	return plans[0], nil
+}
+
+func buildV1PlanFields(plan *store.PlanMessage) *v1pb.Plan {
+	var specs []*v1pb.Plan_Spec
+	if plan.Config != nil {
+		specs = convertToPlanSpecs(plan.ProjectID, plan.Config.Specs)
+	}
+
+	p := &v1pb.Plan{
+		Name:                    common.FormatPlan(plan.ProjectID, plan.UID),
+		Title:                   plan.Name,
+		Description:             plan.Description,
+		Creator:                 common.FormatUserEmail(plan.Creator),
+		Specs:                   specs,
+		CreateTime:              timestamppb.New(plan.CreatedAt),
+		UpdateTime:              timestamppb.New(plan.UpdatedAt),
+		State:                   convertDeletedToState(plan.Deleted),
+		PlanCheckRunStatusCount: map[string]int32{},
+	}
+	if plan.Config != nil {
+		p.HasRollout = plan.Config.HasRollout
+	}
+	return p
+}
+
+func buildRolloutStageSummaries(projectID string, planUID int64, counts []*store.TaskStatusCount, environmentOrderMap map[string]int) []*v1pb.Plan_RolloutStageSummary {
+	summariesByEnvironment := make(map[string]map[v1pb.Task_Status]int32)
+	for _, count := range counts {
+		if _, exists := environmentOrderMap[count.Environment]; !exists {
+			continue
+		}
+		status, ok := convertTaskRunStatusStringToAPITaskStatus(count.Status)
+		if !ok {
+			continue
+		}
+		if _, exists := summariesByEnvironment[count.Environment]; !exists {
+			summariesByEnvironment[count.Environment] = make(map[v1pb.Task_Status]int32)
+		}
+		summariesByEnvironment[count.Environment][status] += count.Count
+	}
+
+	environments := make([]string, 0, len(summariesByEnvironment))
+	for environment := range summariesByEnvironment {
+		environments = append(environments, environment)
+	}
+	slices.SortFunc(environments, func(a, b string) int {
+		return environmentOrderMap[a] - environmentOrderMap[b]
+	})
+
+	summaries := make([]*v1pb.Plan_RolloutStageSummary, 0, len(environments))
+	for _, environment := range environments {
+		stageID := common.FormatStageID(environment)
+		statusCounts := make([]*v1pb.Plan_TaskStatusCount, 0, len(summariesByEnvironment[environment]))
+		for _, status := range []v1pb.Task_Status{
+			v1pb.Task_NOT_STARTED,
+			v1pb.Task_PENDING,
+			v1pb.Task_RUNNING,
+			v1pb.Task_DONE,
+			v1pb.Task_FAILED,
+			v1pb.Task_CANCELED,
+			v1pb.Task_SKIPPED,
+		} {
+			if count, exists := summariesByEnvironment[environment][status]; exists {
+				statusCounts = append(statusCounts, &v1pb.Plan_TaskStatusCount{
+					Status: status,
+					Count:  count,
+				})
+			}
+		}
+		summaries = append(summaries, &v1pb.Plan_RolloutStageSummary{
+			Stage:            common.FormatStage(projectID, planUID, stageID),
+			TaskStatusCounts: statusCounts,
+		})
+	}
+	return summaries
+}
+
+func convertTaskRunStatusStringToAPITaskStatus(status string) (v1pb.Task_Status, bool) {
+	switch status {
+	case storepb.TaskRun_NOT_STARTED.String():
+		return v1pb.Task_NOT_STARTED, true
+	case storepb.TaskRun_PENDING.String():
+		return v1pb.Task_PENDING, true
+	case storepb.TaskRun_RUNNING.String():
+		return v1pb.Task_RUNNING, true
+	case storepb.TaskRun_DONE.String():
+		return v1pb.Task_DONE, true
+	case storepb.TaskRun_FAILED.String():
+		return v1pb.Task_FAILED, true
+	case storepb.TaskRun_CANCELED.String():
+		return v1pb.Task_CANCELED, true
+	case storepb.TaskRun_SKIPPED.String():
+		return v1pb.Task_SKIPPED, true
+	default:
+		return v1pb.Task_STATUS_UNSPECIFIED, false
+	}
+}
+
+func convertPlan(plan *v1pb.Plan) *storepb.PlanConfig {
+	if plan == nil {
+		return nil
+	}
+
+	// At this point, plan.Specs should always be populated
+	// (either originally or converted from steps at API entry point)
+	return &storepb.PlanConfig{
+		Specs: convertPlanSpecs(plan.Specs),
+	}
+}
+
+func convertToPlanCheckRun(projectID string, planUID int64, run *store.PlanCheckRunMessage) *v1pb.PlanCheckRun {
+	return &v1pb.PlanCheckRun{
+		Name:       common.FormatPlanCheckRun(projectID, planUID),
+		Status:     convertToPlanCheckRunStatus(run.Status),
+		Results:    convertToPlanCheckRunResults(run.Result.GetResults()),
+		Error:      run.Result.Error,
+		CreateTime: timestamppb.New(run.CreatedAt),
+	}
+}
+
+func convertToPlanSpecs(projectID string, specs []*storepb.PlanConfig_Spec) []*v1pb.Plan_Spec {
+	v1Specs := make([]*v1pb.Plan_Spec, len(specs))
+	for i := range specs {
+		v1Specs[i] = convertToPlanSpec(projectID, specs[i])
+	}
+	return v1Specs
+}
+
+func convertToPlanSpec(projectID string, spec *storepb.PlanConfig_Spec) *v1pb.Plan_Spec {
+	v1Spec := &v1pb.Plan_Spec{
+		Id: spec.Id,
+	}
+
+	switch v := spec.Config.(type) {
+	case *storepb.PlanConfig_Spec_CreateDatabaseConfig:
+		v1Spec.Config = convertToPlanSpecCreateDatabaseConfig(v)
+	case *storepb.PlanConfig_Spec_ChangeDatabaseConfig:
+		v1Spec.Config = convertToPlanSpecChangeDatabaseConfig(projectID, v)
+	case *storepb.PlanConfig_Spec_ExportDataConfig:
+		v1Spec.Config = convertToPlanSpecExportDataConfig(projectID, v)
+	default:
+	}
+
+	return v1Spec
+}
+
+func convertToPlanSpecCreateDatabaseConfig(config *storepb.PlanConfig_Spec_CreateDatabaseConfig) *v1pb.Plan_Spec_CreateDatabaseConfig {
+	c := config.CreateDatabaseConfig
+	return &v1pb.Plan_Spec_CreateDatabaseConfig{
+		CreateDatabaseConfig: &v1pb.Plan_CreateDatabaseConfig{
+			Target:       c.Target,
+			Database:     c.Database,
+			Table:        c.Table,
+			CharacterSet: c.CharacterSet,
+			Collation:    c.Collation,
+			Cluster:      c.Cluster,
+			Owner:        c.Owner,
+			Environment:  c.Environment,
+		},
+	}
+}
+
+func convertToPlanSpecChangeDatabaseConfig(projectID string, config *storepb.PlanConfig_Spec_ChangeDatabaseConfig) *v1pb.Plan_Spec_ChangeDatabaseConfig {
+	c := config.ChangeDatabaseConfig
+
+	// Only format sheet if SheetSha256 is not empty (for non-release tasks)
+	var sheet string
+	if c.SheetSha256 != "" {
+		sheet = common.FormatSheet(projectID, c.SheetSha256)
+	}
+
+	return &v1pb.Plan_Spec_ChangeDatabaseConfig{
+		ChangeDatabaseConfig: &v1pb.Plan_ChangeDatabaseConfig{
+			Targets:           c.Targets,
+			Sheet:             sheet,
+			Release:           c.Release,
+			EnablePriorBackup: c.EnablePriorBackup,
+		},
+	}
+}
+
+func convertToPlanSpecExportDataConfig(projectID string, config *storepb.PlanConfig_Spec_ExportDataConfig) *v1pb.Plan_Spec_ExportDataConfig {
+	c := config.ExportDataConfig
+	return &v1pb.Plan_Spec_ExportDataConfig{
+		ExportDataConfig: &v1pb.Plan_ExportDataConfig{
+			Targets:  c.Targets,
+			Sheet:    common.FormatSheet(projectID, c.SheetSha256),
+			Format:   convertExportFormat(c.Format),
+			Password: c.Password,
+		},
+	}
+}
+
+func convertPlanSpecs(specs []*v1pb.Plan_Spec) []*storepb.PlanConfig_Spec {
+	storeSpecs := make([]*storepb.PlanConfig_Spec, len(specs))
+	for i := range specs {
+		storeSpecs[i] = convertPlanSpec(specs[i])
+	}
+	return storeSpecs
+}
+
+func convertPlanSpec(spec *v1pb.Plan_Spec) *storepb.PlanConfig_Spec {
+	storeSpec := &storepb.PlanConfig_Spec{
+		Id: spec.Id,
+	}
+
+	switch v := spec.Config.(type) {
+	case *v1pb.Plan_Spec_CreateDatabaseConfig:
+		storeSpec.Config = convertPlanSpecCreateDatabaseConfig(v)
+	case *v1pb.Plan_Spec_ChangeDatabaseConfig:
+		storeSpec.Config = convertPlanSpecChangeDatabaseConfig(v)
+	case *v1pb.Plan_Spec_ExportDataConfig:
+		storeSpec.Config = convertPlanSpecExportDataConfig(v)
+	default:
+	}
+	return storeSpec
+}
+
+func convertPlanSpecCreateDatabaseConfig(config *v1pb.Plan_Spec_CreateDatabaseConfig) *storepb.PlanConfig_Spec_CreateDatabaseConfig {
+	c := config.CreateDatabaseConfig
+	return &storepb.PlanConfig_Spec_CreateDatabaseConfig{
+		CreateDatabaseConfig: convertPlanConfigCreateDatabaseConfig(c),
+	}
+}
+
+func convertPlanConfigCreateDatabaseConfig(c *v1pb.Plan_CreateDatabaseConfig) *storepb.PlanConfig_CreateDatabaseConfig {
+	return &storepb.PlanConfig_CreateDatabaseConfig{
+		Target:       c.Target,
+		Database:     c.Database,
+		Table:        c.Table,
+		CharacterSet: c.CharacterSet,
+		Collation:    c.Collation,
+		Cluster:      c.Cluster,
+		Owner:        c.Owner,
+		Environment:  c.Environment,
+	}
+}
+
+func convertPlanSpecChangeDatabaseConfig(config *v1pb.Plan_Spec_ChangeDatabaseConfig) *storepb.PlanConfig_Spec_ChangeDatabaseConfig {
+	c := config.ChangeDatabaseConfig
+
+	// Sheet can be empty when using Release-based workflow (SQL comes from release files).
+	// Plans can use either Sheet-based or Release-based approach, but not both.
+	var sheetSha256 string
+	if c.Sheet != "" {
+		_, sha256, err := common.GetProjectResourceIDSheetSha256(c.Sheet)
+		if err != nil {
+			return nil
+		}
+		sheetSha256 = sha256
+	}
+	return &storepb.PlanConfig_Spec_ChangeDatabaseConfig{
+		ChangeDatabaseConfig: &storepb.PlanConfig_ChangeDatabaseConfig{
+			Targets:           c.Targets,
+			SheetSha256:       sheetSha256,
+			Release:           c.Release,
+			EnablePriorBackup: c.EnablePriorBackup,
+		},
+	}
+}
+
+func convertPlanSpecExportDataConfig(config *v1pb.Plan_Spec_ExportDataConfig) *storepb.PlanConfig_Spec_ExportDataConfig {
+	c := config.ExportDataConfig
+	// Sheet can be empty if not yet attached to the export data config.
+	var sheetSha256 string
+	if c.Sheet != "" {
+		_, sha256, err := common.GetProjectResourceIDSheetSha256(c.Sheet)
+		if err != nil {
+			return nil
+		}
+		sheetSha256 = sha256
+	}
+	return &storepb.PlanConfig_Spec_ExportDataConfig{
+		ExportDataConfig: &storepb.PlanConfig_ExportDataConfig{
+			Targets:     c.Targets,
+			SheetSha256: sheetSha256,
+			Format:      convertToExportFormat(c.Format),
+			Password:    c.Password,
+		},
+	}
+}
+
+func convertToPlanCheckRunStatus(status store.PlanCheckRunStatus) v1pb.PlanCheckRun_Status {
+	switch status {
+	case store.PlanCheckRunStatusCanceled:
+		return v1pb.PlanCheckRun_CANCELED
+	case store.PlanCheckRunStatusDone:
+		return v1pb.PlanCheckRun_DONE
+	case store.PlanCheckRunStatusFailed:
+		return v1pb.PlanCheckRun_FAILED
+	case store.PlanCheckRunStatusRunning:
+		return v1pb.PlanCheckRun_RUNNING
+	default:
+		return v1pb.PlanCheckRun_STATUS_UNSPECIFIED
+	}
+}
+
+func convertToPlanCheckRunResults(results []*storepb.PlanCheckRunResult_Result) []*v1pb.PlanCheckRun_Result {
+	var resultsV1 []*v1pb.PlanCheckRun_Result
+	for _, result := range results {
+		resultsV1 = append(resultsV1, convertToPlanCheckRunResult(result))
+	}
+	return resultsV1
+}
+
+func convertToPlanCheckRunResult(result *storepb.PlanCheckRunResult_Result) *v1pb.PlanCheckRun_Result {
+	resultV1 := &v1pb.PlanCheckRun_Result{
+		Status:  convertToPlanCheckRunResultStatus(result.Status),
+		Title:   result.Title,
+		Content: result.Content,
+		Code:    result.Code,
+		Target:  result.Target,
+		Type:    convertToV1ResultType(result.Type),
+		Report:  nil,
+	}
+	switch report := result.Report.(type) {
+	case *storepb.PlanCheckRunResult_Result_SqlSummaryReport_:
+		resultV1.Report = &v1pb.PlanCheckRun_Result_SqlSummaryReport_{
+			SqlSummaryReport: &v1pb.PlanCheckRun_Result_SqlSummaryReport{
+				StatementTypes: convertStatementTypesToV1(report.SqlSummaryReport.StatementTypes),
+				AffectedRows:   report.SqlSummaryReport.AffectedRows,
+			},
+		}
+	case *storepb.PlanCheckRunResult_Result_SqlReviewReport_:
+		resultV1.Report = &v1pb.PlanCheckRun_Result_SqlReviewReport_{
+			SqlReviewReport: &v1pb.PlanCheckRun_Result_SqlReviewReport{
+				StartPosition: convertToPosition(report.SqlReviewReport.StartPosition),
+				EndPosition:   convertToPosition(report.SqlReviewReport.EndPosition),
+			},
+		}
+	default:
+	}
+	return resultV1
+}
+
+func convertToV1ResultType(t storepb.PlanCheckType) v1pb.PlanCheckRun_Result_Type {
+	switch t {
+	case storepb.PlanCheckType_PLAN_CHECK_TYPE_STATEMENT_ADVISE:
+		return v1pb.PlanCheckRun_Result_STATEMENT_ADVISE
+	case storepb.PlanCheckType_PLAN_CHECK_TYPE_STATEMENT_SUMMARY_REPORT:
+		return v1pb.PlanCheckRun_Result_STATEMENT_SUMMARY_REPORT
+	case storepb.PlanCheckType_PLAN_CHECK_TYPE_GHOST_SYNC:
+		return v1pb.PlanCheckRun_Result_GHOST_SYNC
+	default:
+		return v1pb.PlanCheckRun_Result_TYPE_UNSPECIFIED
+	}
+}
+
+func convertStatementTypesToV1(storeTypes []storepb.StatementType) []v1pb.StatementType {
+	result := make([]v1pb.StatementType, len(storeTypes))
+	for i, t := range storeTypes {
+		result[i] = v1pb.StatementType(t)
+	}
+	return result
+}
+
+func convertToPlanCheckRunResultStatus(status storepb.Advice_Status) v1pb.Advice_Level {
+	switch status {
+	case storepb.Advice_STATUS_UNSPECIFIED:
+		return v1pb.Advice_ADVICE_LEVEL_UNSPECIFIED
+	case storepb.Advice_SUCCESS:
+		return v1pb.Advice_SUCCESS
+	case storepb.Advice_WARNING:
+		return v1pb.Advice_WARNING
+	case storepb.Advice_ERROR:
+		return v1pb.Advice_ERROR
+	default:
+		return v1pb.Advice_ADVICE_LEVEL_UNSPECIFIED
+	}
+}

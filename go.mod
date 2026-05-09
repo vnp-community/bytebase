@@ -94,6 +94,7 @@ require (
 	github.com/yterajima/go-sitemap v0.4.0
 	github.com/zeebo/xxh3 v1.1.0
 	go.mongodb.org/mongo-driver/v2 v2.5.0
+	go.uber.org/mock v0.5.2
 	go.uber.org/multierr v1.11.0
 	golang.org/x/crypto v0.49.0
 	golang.org/x/oauth2 v0.35.0

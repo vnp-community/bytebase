@@ -102,9 +102,12 @@ func (s *Scheduler) executeTaskRun(ctx context.Context, projectID string, taskRu
 		return errors.Errorf("executor not found for task type: %v", task.Type)
 	}
 
-	// Update started_at
+	// Update started_at and assigned node
 	if err := s.store.UpdateTaskRunStartAt(ctx, task.ProjectID, taskRunUID); err != nil {
 		return errors.Wrapf(err, "failed to update task run start at")
+	}
+	if err := s.store.UpdateTaskRunAssignedNode(ctx, taskRunUID, s.profile.ReplicaID); err != nil {
+		return errors.Wrapf(err, "failed to update task run assigned node")
 	}
 
 	go s.runTaskRunOnce(ctx, taskRunUID, task, executor)

@@ -9,4 +9,4 @@
 //	go install go.uber.org/mock/mockgen@latest
 package mock
 
-//go:generate mockgen -package mock -destination mock_store.go github.com/bytebase/bytebase/backend/store UserReader,UserWriter,UserStore,ProjectReader,ProjectWriter,PlanReader,IssueReader,DatabaseReader,InstanceReader,PolicyReader,SettingReader,WorkspaceReader,AuditLogWriter,DBSchemaReader,SheetReader,RoleReader,ChangelogReader,DataStore
+//go:generate mockgen -package mock -destination mock_store.go github.com/bytebase/bytebase/backend/store UserReader,UserWriter,UserStore,ProjectReader,ProjectWriter,PlanReader,IssueReader,DatabaseReader,DatabaseWriter,InstanceReader,PolicyReader,SettingReader,WorkspaceReader,AuditLogWriter,DBSchemaReader,SheetReader,RoleReader,ChangelogReader,TaskStore,TaskRunStore,QueryHistoryStore,AccessGrantReader,ExportArchiveReader,AccountReader,SignalWriter,PlanWebhookWriter,SyncHistoryReader,AuthStore,DataStore

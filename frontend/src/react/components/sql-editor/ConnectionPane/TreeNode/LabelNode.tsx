@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useTranslation } from "react-i18next";
 import { HighlightLabelText } from "@/react/components/HighlightLabelText";
 import type { SQLEditorTreeNode } from "@/types";

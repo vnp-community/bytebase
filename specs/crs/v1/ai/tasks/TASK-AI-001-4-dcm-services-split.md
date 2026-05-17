@@ -7,6 +7,7 @@
 | Depends On | — |
 | Status | ✅ DONE |
 | Completed | 2025-05-10 |
+| Verified | 2025-05-10 |
 | Est. | M (3 services × 2 files each) |
 
 ## Objective
@@ -17,18 +18,19 @@ Split 3 DCM workflow services into 2 files each. Zero functional change.
 
 | File | Lines | Content |
 |------|-------|---------|
-| `plan_service.go` | 539 | Struct + CRUD (Get/List/Create/Update/PlanCheck) |
+| `plan_service.go` | 537 | Struct + CRUD (Get/List/Create/Update/PlanCheck) |
 | `plan_service_spec.go` | 735 | validateSpecs + converters + plan check builders |
 | `issue_service.go` | 547 | Struct + CRUD (Get/List/Search/Create) + filter parser |
 | `issue_service_lifecycle.go` | 713 | ApproveIssue, RejectIssue, RequestIssue, UpdateIssue, BatchUpdate, Comments |
 | `project_service.go` | 531 | Struct + CRUD (Get/List/Create/Update/Delete/Undelete/Batch) |
 | `project_service_iam.go` | 762 | GetIamPolicy, SetIamPolicy, Add/Update/Remove/TestWebhook, IAM validation |
 
-## Verification
+### Verification (2025-05-10 re-verified)
 
 ```bash
 go build ./backend/api/v1/...  # ✅ PASS
 go vet ./backend/api/v1/...    # ✅ PASS
+# Total: 3825 lines across 6 files
 ```
 
 ## Acceptance Criteria

@@ -257,23 +257,13 @@ export const createWorkspaceSlice: AppSliceCreator<WorkspaceSlice> = (
     return subscription;
   },
 
-  currentPlan: () => {
-    return get().subscription?.plan ?? PlanType.FREE;
-  },
+  currentPlan: () => PlanType.ENTERPRISE, // VNP-LIC-001
 
-  isFreePlan: () => get().currentPlan() === PlanType.FREE,
+  isFreePlan: () => false, // VNP-LIC-001
 
-  isTrialing: () => Boolean(get().subscription?.trialing),
+  isTrialing: () => false, // VNP-LIC-001
 
-  isExpired: () => {
-    const subscription = get().subscription;
-    if (!subscription?.expiresTime || get().isFreePlan()) {
-      return false;
-    }
-    return dayjs(
-      getDateForPbTimestampProtoEs(subscription.expiresTime)
-    ).isBefore(new Date());
-  },
+  isExpired: () => false, // VNP-LIC-001
 
   daysBeforeExpire: () => {
     const subscription = get().subscription;
@@ -291,12 +281,7 @@ export const createWorkspaceSlice: AppSliceCreator<WorkspaceSlice> = (
 
   trialingDays: () => trialingDays,
 
-  showTrial: () => {
-    if (!isSelfHostLicense()) {
-      return false;
-    }
-    return !get().subscription || get().isFreePlan();
-  },
+  showTrial: () => false, // VNP-LIC-001
 
   expireAt: () => {
     const subscription = get().subscription;
@@ -308,78 +293,19 @@ export const createWorkspaceSlice: AppSliceCreator<WorkspaceSlice> = (
     );
   },
 
-  instanceCountLimit: () => {
-    const subscription = get().subscription;
-    const licenseLimit = subscription?.instances ?? 0;
-    if (licenseLimit > 0) {
-      return licenseLimit;
-    }
-    const planLimit =
-      PLANS.find((plan) => plan.type === get().currentPlan())
-        ?.maximumInstanceCount ?? 0;
-    if (planLimit < 0) {
-      return licenseLimit > 0 ? licenseLimit : Number.MAX_VALUE;
-    }
-    return planLimit;
-  },
+  instanceCountLimit: () => Number.MAX_VALUE, // VNP-LIC-001
 
-  userCountLimit: () => {
-    let limit =
-      PLANS.find((plan) => plan.type === get().currentPlan())
-        ?.maximumSeatCount ?? 0;
-    if (limit < 0) {
-      limit = Number.MAX_VALUE;
-    }
-    const seats = get().subscription?.seats ?? 0;
-    if (seats < 0) {
-      return Number.MAX_VALUE;
-    }
-    if (seats === 0) {
-      return limit;
-    }
-    return seats;
-  },
+  userCountLimit: () => Number.MAX_VALUE, // VNP-LIC-001
 
-  instanceLicenseCount: () => {
-    const count = get().subscription?.activeInstances ?? 0;
-    return count < 0 ? Number.MAX_VALUE : count;
-  },
+  instanceLicenseCount: () => Number.MAX_VALUE, // VNP-LIC-001
 
-  hasUnifiedInstanceLicense: () => {
-    return get().instanceCountLimit() <= get().instanceLicenseCount();
-  },
+  hasUnifiedInstanceLicense: () => true, // VNP-LIC-001
 
-  hasFeature: (feature) => {
-    if (get().isExpired()) {
-      return false;
-    }
-    return checkFeature(get().currentPlan(), feature);
-  },
+  hasFeature: (_feature) => true, // VNP-LIC-001
 
-  hasInstanceFeature: (feature, instance) => {
-    const plan = get().currentPlan();
-    if (plan === PlanType.FREE) {
-      return get().hasFeature(feature);
-    }
-    if (!instance || !instanceLimitFeature.has(feature)) {
-      return get().hasFeature(feature);
-    }
-    return checkInstanceFeature(
-      plan,
-      feature,
-      get().hasUnifiedInstanceLicense() || instance.activation
-    );
-  },
+  hasInstanceFeature: (_feature, _instance) => true, // VNP-LIC-001
 
-  instanceMissingLicense: (feature, instance) => {
-    if (!instanceLimitFeature.has(feature) || !instance) {
-      return false;
-    }
-    if (get().hasUnifiedInstanceLicense()) {
-      return false;
-    }
-    return get().hasFeature(feature) && !instance.activation;
-  },
+  instanceMissingLicense: (_feature, _instance) => false, // VNP-LIC-001
 
   getMinimumRequiredPlan,
 

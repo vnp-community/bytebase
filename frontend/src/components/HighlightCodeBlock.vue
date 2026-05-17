@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <!-- eslint-disable-next-line vue/no-v-text-v-html-on-component -->
   <component :is="tag" :class="[language, $attrs.class]" v-html="highlightedCode" />

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { PencilLine, Users, Wrench } from "lucide-react";
 import { useVueState } from "@/react/hooks/useVueState";
 import { useWorkSheetStore } from "@/store";

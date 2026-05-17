@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <NTooltip :disabled="Object.keys(labels).length <= minimumShowCount">
     <template #trigger>

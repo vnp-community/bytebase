@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { create } from "@bufbuild/protobuf";
 import { cloneDeep, head, isEqual } from "lodash-es";
 import { useCallback, useEffect, useMemo, useState } from "react";

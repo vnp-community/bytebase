@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"path"
 	"sync"
 	"time"
@@ -26,25 +27,36 @@ import (
 	"github.com/bytebase/bytebase/backend/component/bus"
 	"github.com/bytebase/bytebase/backend/component/config"
 	"github.com/bytebase/bytebase/backend/component/dbfactory"
+	"github.com/bytebase/bytebase/backend/component/health"
 	"github.com/bytebase/bytebase/backend/component/iam"
+	"github.com/bytebase/bytebase/backend/component/leader"
+	"github.com/bytebase/bytebase/backend/component/pghealth"
 	"github.com/bytebase/bytebase/backend/component/sampleinstance"
 	"github.com/bytebase/bytebase/backend/component/sheet"
 	"github.com/bytebase/bytebase/backend/component/telemetry"
 	"github.com/bytebase/bytebase/backend/component/webhook"
 	"github.com/bytebase/bytebase/backend/demo"
 	"github.com/bytebase/bytebase/backend/enterprise"
+	"github.com/prometheus/client_golang/prometheus"
 	storepb "github.com/bytebase/bytebase/backend/generated-go/store"
 	v1pb "github.com/bytebase/bytebase/backend/generated-go/v1"
 	"github.com/bytebase/bytebase/backend/migrator"
 	"github.com/bytebase/bytebase/backend/resources/postgres"
 	"github.com/bytebase/bytebase/backend/runner/approval"
+	"github.com/bytebase/bytebase/backend/runner/backup"
 	"github.com/bytebase/bytebase/backend/runner/cleaner"
 	"github.com/bytebase/bytebase/backend/runner/heartbeat"
+	runnerleader "github.com/bytebase/bytebase/backend/runner/leader"
+	"github.com/bytebase/bytebase/backend/runner/leaderrunner"
 	"github.com/bytebase/bytebase/backend/runner/monitor"
 	"github.com/bytebase/bytebase/backend/runner/notifylistener"
 	"github.com/bytebase/bytebase/backend/runner/plancheck"
+	"github.com/bytebase/bytebase/backend/runner/replication"
+	"github.com/bytebase/bytebase/backend/runner/selfheal"
 	"github.com/bytebase/bytebase/backend/runner/schemasync"
 	"github.com/bytebase/bytebase/backend/runner/taskrun"
+	"github.com/bytebase/bytebase/backend/service"
+	runnerservice "github.com/bytebase/bytebase/backend/service/runner"
 	"github.com/bytebase/bytebase/backend/store"
 )
 
@@ -54,7 +66,7 @@ const (
 	scimAPIPrefix    = "/scim"
 	// lspAPI is the API for Bytebase Language Server Protocol.
 	lspAPI                 = "/lsp"
-	gracefulShutdownPeriod = 10 * time.Second
+	gracefulShutdownPeriod = 30 * time.Second
 )
 
 // Server is the Bytebase server.
@@ -67,6 +79,8 @@ type Server struct {
 	notifyListener     *notifylistener.Listener
 	dataCleaner        *cleaner.DataCleaner
 	heartbeatRunner    *heartbeat.Runner
+	leaderRunner       *runnerleader.Runner
+	selfhealRunner     *selfheal.Runner
 	runnerWG           sync.WaitGroup
 
 	webhookManager        *webhook.Manager
@@ -82,6 +96,8 @@ type Server struct {
 	store       *store.Store
 	dbFactory   *dbfactory.DBFactory
 	registry    *ComponentRegistry
+	promRegistry *prometheus.Registry
+	healthChecker *health.Checker
 	poolManager *store.PoolManager
 	startedTS   int64
 
@@ -89,7 +105,12 @@ type Server struct {
 	stopper []func()
 
 	// bus is the message bus for inter-component communication within the server.
-	bus *bus.Bus
+	bus bus.EventBus
+
+	// Gateway-mode fields (active when BB_USE_GATEWAY=true).
+	gatewayMode    bool
+	serviceRegistry *service.Registry
+	runnerService   *runnerservice.Service
 
 	// boot specifies that whether the server boot correctly
 	cancel context.CancelFunc
@@ -98,9 +119,10 @@ type Server struct {
 // NewServer creates a server.
 func NewServer(ctx context.Context, profile *config.Profile) (*Server, error) {
 	s := &Server{
-		profile:   profile,
-		startedTS: time.Now().Unix(),
-		registry:  NewComponentRegistry(),
+		profile:      profile,
+		startedTS:    time.Now().Unix(),
+		registry:     NewComponentRegistry(),
+		promRegistry: prometheus.NewRegistry(),
 	}
 
 	// Display config
@@ -156,6 +178,13 @@ func NewServer(ctx context.Context, profile *config.Profile) (*Server, error) {
 		return nil, errors.Wrapf(err, "failed to migrate schema")
 	}
 	s.store = stores
+	s.store.RegisterPoolMetrics()
+
+	// T-012: Pre-populate database cache at startup.
+	s.store.WarmDatabaseCache(ctx)
+
+	s.healthChecker = health.NewChecker(stores.GetDB(), s.promRegistry)
+
 	// Apply feature-flagged Store options (dual pool, cache backend).
 	poolManager, err := applyStoreOptions(ctx, stores, profile)
 	if err != nil {
@@ -204,7 +233,7 @@ func NewServer(ctx context.Context, profile *config.Profile) (*Server, error) {
 		logSetup.GetEnableMetricCollection(),
 	)
 
-	s.bus, err = bus.New()
+	s.bus, err = bus.NewEventBus(profile, stores.GetDB())
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create message bus")
 	}
@@ -223,7 +252,7 @@ func NewServer(ctx context.Context, profile *config.Profile) (*Server, error) {
 		return nil, errors.Wrapf(err, "failed to create iam manager")
 	}
 	s.webhookManager = webhook.NewManager(stores, profile)
-	s.dbFactory = dbfactory.New(s.store, s.licenseService)
+	s.dbFactory = dbfactory.New(s.store, s.licenseService, s.promRegistry)
 
 	// Configure echo server.
 	s.echoServer = echo.New()
@@ -245,6 +274,10 @@ func NewServer(ctx context.Context, profile *config.Profile) (*Server, error) {
 
 	// Heartbeat runner
 	s.heartbeatRunner = heartbeat.NewRunner(stores, profile)
+	// Leader runner
+	s.leaderRunner = runnerleader.NewRunner(stores, profile)
+	// Selfheal runner
+	s.selfhealRunner = selfheal.NewRunner(stores, profile, s.healthChecker)
 
 	// LSP server.
 	s.lspServer = lsp.NewServer(s.store, profile, secret, s.bus, s.iamManager, s.licenseService)
@@ -258,8 +291,49 @@ func NewServer(ctx context.Context, profile *config.Profile) (*Server, error) {
 
 	stripeWebhookHandler := stripeapi.NewWebhookHandler(s.store, s.licenseService, profile.StripeWebhookSecret)
 
-	if err := configureGrpcRouters(ctx, s.echoServer, s.store, sheetManager, s.dbFactory, s.licenseService, s.profile, s.bus, s.schemaSyncer, s.webhookManager, s.iamManager, secret, s.sampleInstanceManager); err != nil {
-		return nil, errors.Wrapf(err, "failed to configure gRPC routers")
+	// Choose routing mode: gateway (new) vs legacy (existing).
+	if os.Getenv("BB_USE_GATEWAY") == "true" {
+		slog.Info("Gateway mode enabled — initializing domain services")
+		s.gatewayMode = true
+
+		gwResult := initGatewayServices(&GatewayDeps{
+			Store:                 s.store,
+			SheetManager:          sheetManager,
+			DBFactory:             s.dbFactory,
+			LicenseService:        s.licenseService,
+			Profile:               s.profile,
+			Bus:                   s.bus,
+			SchemaSyncer:          s.schemaSyncer,
+			WebhookManager:        s.webhookManager,
+			IAMManager:            s.iamManager,
+			Secret:                secret,
+			SampleInstanceManager: s.sampleInstanceManager,
+			HealthChecker:         s.healthChecker,
+		})
+		s.serviceRegistry = gwResult.Registry
+		s.runnerService = gwResult.RunnerService
+
+		// Start domain services (bufconn HTTP servers).
+		if err := s.serviceRegistry.StartAll(ctx); err != nil {
+			return nil, errors.Wrapf(err, "failed to start domain services")
+		}
+
+		// Configure gateway routing.
+		if err := configureGatewayRouters(ctx, s.echoServer, s.serviceRegistry, &GatewayDeps{
+			Store:          s.store,
+			Secret:         secret,
+			LicenseService: s.licenseService,
+			Bus:            s.bus,
+			Profile:        s.profile,
+			IAMManager:     s.iamManager,
+		}); err != nil {
+			return nil, errors.Wrapf(err, "failed to configure gateway routers")
+		}
+	} else {
+		// Legacy mode — existing monolithic router.
+		if err := configureGrpcRouters(ctx, s.echoServer, s.store, sheetManager, s.dbFactory, s.licenseService, s.profile, s.bus, s.schemaSyncer, s.webhookManager, s.iamManager, secret, s.sampleInstanceManager); err != nil {
+			return nil, errors.Wrapf(err, "failed to configure gRPC routers")
+		}
 	}
 	configureEchoRouters(s.echoServer, s, s.lspServer, directorySyncServer, oauth2Service, mcpServer, stripeWebhookHandler, profile)
 
@@ -271,29 +345,89 @@ func NewServer(ctx context.Context, profile *config.Profile) (*Server, error) {
 func (s *Server) Run(ctx context.Context, port int) error {
 	ctx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
-	// runnerWG waits for all goroutines to complete.
-	s.runnerWG.Add(1)
-	go s.taskScheduler.Run(ctx, &s.runnerWG)
-	s.runnerWG.Add(1)
-	go s.schemaSyncer.Run(ctx, &s.runnerWG)
-	s.runnerWG.Add(1)
-	go s.approvalRunner.Run(ctx, &s.runnerWG)
 
-	s.runnerWG.Add(1)
-	go s.planCheckScheduler.Run(ctx, &s.runnerWG)
+	if s.gatewayMode {
+		// Gateway mode — delegate to RunnerService.
+		slog.Info("Gateway mode: starting runners via RunnerService")
+		s.runnerService.Run(ctx)
+	} else if s.profile.HA {
+		// HA mode: exclusive runners use leader election, shared runners run on all replicas.
+		slog.Info("HA mode enabled — starting runners with leader election")
 
-	s.runnerWG.Add(1)
-	go s.dataCleaner.Run(ctx, &s.runnerWG)
+		// Exclusive runners — only leader executes
+		s.startLeaderRunner(ctx, s.taskScheduler, leader.LockIDTaskScheduler, "TaskScheduler")
+		s.startLeaderRunner(ctx, s.schemaSyncer, leader.LockIDSchemaSync, "SchemaSync")
+		s.startLeaderRunner(ctx, s.approvalRunner, leader.LockIDApproval, "Approval")
+		s.startLeaderRunner(ctx, s.planCheckScheduler, leader.LockIDPlanCheck, "PlanCheck")
+		s.startLeaderRunner(ctx, s.dataCleaner, leader.LockIDDataCleaner, "DataCleaner")
 
-	s.runnerWG.Add(1)
-	go s.heartbeatRunner.Run(ctx, &s.runnerWG)
+		// Shared runners — all replicas
+		s.runnerWG.Add(1)
+		go s.leaderRunner.Run(ctx, &s.runnerWG)
+		s.runnerWG.Add(1)
+		go s.selfhealRunner.Run(ctx, &s.runnerWG)
+		s.runnerWG.Add(1)
+		go s.heartbeatRunner.Run(ctx, &s.runnerWG)
+		s.runnerWG.Add(1)
+		go s.notifyListener.Run(ctx, &s.runnerWG)
 
-	s.runnerWG.Add(1)
-	go s.notifyListener.Run(ctx, &s.runnerWG)
+		// Start cache invalidator for cross-replica cache coherence
+		cacheInvalidator := store.NewCacheInvalidator(s.store, s.store.GetDB())
+		s.runnerWG.Add(1)
+		go cacheInvalidator.Run(ctx, &s.runnerWG)
 
-	s.runnerWG.Add(1)
-	mmm := monitor.NewMemoryMonitor(s.profile)
-	go mmm.Run(ctx, &s.runnerWG)
+		// Start PGBus consumers for durable message processing
+		if pgBus, ok := s.bus.(*bus.PGBus); ok {
+			pgBus.StartConsumers(ctx, &s.runnerWG)
+		}
+	} else {
+		// Single-node: existing behavior (unchanged)
+		s.runnerWG.Add(1)
+		go s.taskScheduler.Run(ctx, &s.runnerWG)
+		s.runnerWG.Add(1)
+		go s.schemaSyncer.Run(ctx, &s.runnerWG)
+		s.runnerWG.Add(1)
+		go s.approvalRunner.Run(ctx, &s.runnerWG)
+		s.runnerWG.Add(1)
+		go s.planCheckScheduler.Run(ctx, &s.runnerWG)
+		s.runnerWG.Add(1)
+		go s.dataCleaner.Run(ctx, &s.runnerWG)
+		s.runnerWG.Add(1)
+		go s.heartbeatRunner.Run(ctx, &s.runnerWG)
+		s.runnerWG.Add(1)
+		go s.notifyListener.Run(ctx, &s.runnerWG)
+	}
+
+	// Additional monitors — only in legacy/HA mode (gateway RunnerService handles these).
+	if !s.gatewayMode {
+		s.runnerWG.Add(1)
+		mmm := monitor.NewMemoryMonitor(s.profile)
+		go mmm.Run(ctx, &s.runnerWG)
+
+		s.runnerWG.Add(1)
+		poolMon := monitor.NewPoolMonitor(s.store.GetDB())
+		go poolMon.Run(ctx, &s.runnerWG)
+
+		// PG health monitor — embedded PG only (no-op for external PG).
+		pgMon := pghealth.NewMonitor(s.store.GetDB(), s.profile, nil)
+		s.runnerWG.Add(1)
+		go pgMon.Run(ctx, &s.runnerWG)
+
+		// PG backup scheduler
+		if s.profile.BackupEnabled {
+			backupExecutor := backup.NewExecutor(s.store, s.profile)
+			backupSched := backup.NewScheduler(s.store, s.profile, backupExecutor, s.leaderRunner.IsLeader)
+			s.runnerWG.Add(1)
+			go backupSched.Run(ctx, &s.runnerWG)
+		}
+
+		// Multi-Region Replication Monitor
+		if s.profile.RegionRole != "" {
+			repMon := replication.NewMonitor(s.store.GetDB(), s.profile)
+			s.runnerWG.Add(1)
+			go repMon.Run(ctx, &s.runnerWG)
+		}
+	}
 
 	address := fmt.Sprintf(":%d", port)
 	listener, err := net.Listen("tcp", address)
@@ -326,9 +460,15 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, gracefulShutdownPeriod)
 	defer cancel()
 
-	// Cancel the worker
-	if s.cancel != nil {
-		s.cancel()
+	// Gateway mode: signal heartbeat via RunnerService.
+	if s.gatewayMode {
+		if hr := s.runnerService.HeartbeatRunner(); hr != nil {
+			hr.SetStatus("DRAINING")
+			hr.SendHeartbeat(context.Background())
+		}
+	} else if s.heartbeatRunner != nil {
+		s.heartbeatRunner.SetStatus("DRAINING")
+		s.heartbeatRunner.SendHeartbeat(context.Background())
 	}
 
 	// Shutdown HTTP server
@@ -338,8 +478,31 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		}
 	}
 
+	// Cancel the worker
+	if s.cancel != nil {
+		s.cancel()
+	}
+
 	// Wait for all runners to exit.
-	s.runnerWG.Wait()
+	if s.gatewayMode {
+		s.runnerService.Wait()
+		// Stop domain services.
+		if err := s.serviceRegistry.StopAll(ctx); err != nil {
+			slog.Error("Failed to stop domain services", log.BBError(err))
+		}
+	} else {
+		s.runnerWG.Wait()
+	}
+
+	if s.gatewayMode {
+		if hr := s.runnerService.HeartbeatRunner(); hr != nil {
+			hr.SetStatus("STOPPED")
+			hr.SendHeartbeat(context.Background())
+		}
+	} else if s.heartbeatRunner != nil {
+		s.heartbeatRunner.SetStatus("STOPPED")
+		s.heartbeatRunner.SendHeartbeat(context.Background())
+	}
 
 	// Close pool manager (dual pool)
 	if s.poolManager != nil {
@@ -367,3 +530,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	return nil
 }
+
+// startLeaderRunner wraps a runner with leader election and starts it in a goroutine.
+// The runner will only execute on the replica that holds the advisory lock for lockID.
+func (s *Server) startLeaderRunner(ctx context.Context, r leaderrunner.Runner, lockID int64, name string) {
+	elector := leader.NewLeaderElector(s.store.GetDB(), lockID, 10*time.Second, name)
+	wrapped := leaderrunner.NewLeaderRunner(r, elector, name)
+	s.runnerWG.Add(1)
+	go wrapped.Run(ctx, &s.runnerWG)
+}
+

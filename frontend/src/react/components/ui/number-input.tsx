@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { NumberField } from "@base-ui/react/number-field";
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";

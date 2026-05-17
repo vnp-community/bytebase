@@ -8,6 +8,7 @@
 | **Priority** | P0 |
 | **Depends on** | T-004 (workspace filter in ListDatabases) |
 | **Blocks** | None |
+| **Status** | DONE |
 
 ## Objective
 

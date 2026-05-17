@@ -6,6 +6,9 @@
 | Priority | P1 |
 | Depends On | TASK-WEAK-002-1 |
 | Est. | S (~60 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-12 |
+| Notes | Created `backend/server/cors_audit.go` with `bytebase_cors_rejected_total{origin}` counter and `bytebase_dev_mode` gauge. Combined with TASK-002-1 in single file. |
 
 ## Objective
 

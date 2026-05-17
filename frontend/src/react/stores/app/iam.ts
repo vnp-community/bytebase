@@ -23,40 +23,51 @@ export const createIamSlice: AppSliceCreator<IamSlice> = (set, get) => ({
       get().loadWorkspace(),
     ]);
 
+    // Skip ListRoles if already loaded — only fetch once per session.
+    // In-flight deduplication still applies via rolesRequest.
     const rolesRequest =
-      get().rolesRequest ??
-      roleServiceClientConnect
-        .listRoles(createProto(ListRolesRequestSchema, {}))
-        .then((response) => {
-          set({ roles: response.roles, rolesRequest: undefined });
-          return response.roles;
-        })
-        .catch(() => {
-          set({ rolesRequest: undefined });
-          return [];
-        });
-    set({ rolesRequest });
+      get().roles.length > 0
+        ? Promise.resolve(get().roles)
+        : get().rolesRequest ??
+          roleServiceClientConnect
+            .listRoles(createProto(ListRolesRequestSchema, {}))
+            .then((response) => {
+              set({ roles: response.roles, rolesRequest: undefined });
+              return response.roles;
+            })
+            .catch(() => {
+              set({ rolesRequest: undefined });
+              return [];
+            });
+    if (get().roles.length === 0 && !get().rolesRequest) {
+      set({ rolesRequest });
+    }
 
+    // Skip GetIamPolicy if already loaded — only fetch once per session.
     const policyResource =
       get().serverInfo?.workspace ||
       get().workspace?.name ||
       get().currentUser?.workspace ||
       `${workspaceNamePrefix}-`;
     const policyRequest =
-      get().workspacePolicyRequest ??
-      workspaceServiceClientConnect
-        .getIamPolicy(
-          createProto(GetIamPolicyRequestSchema, { resource: policyResource })
-        )
-        .then((workspacePolicy) => {
-          set({ workspacePolicy, workspacePolicyRequest: undefined });
-          return workspacePolicy;
-        })
-        .catch(() => {
-          set({ workspacePolicyRequest: undefined });
-          return undefined;
-        });
-    set({ workspacePolicyRequest: policyRequest });
+      get().workspacePolicy != null
+        ? Promise.resolve(get().workspacePolicy)
+        : get().workspacePolicyRequest ??
+          workspaceServiceClientConnect
+            .getIamPolicy(
+              createProto(GetIamPolicyRequestSchema, { resource: policyResource })
+            )
+            .then((workspacePolicy) => {
+              set({ workspacePolicy, workspacePolicyRequest: undefined });
+              return workspacePolicy;
+            })
+            .catch(() => {
+              set({ workspacePolicyRequest: undefined });
+              return undefined;
+            });
+    if (get().workspacePolicy == null && !get().workspacePolicyRequest) {
+      set({ workspacePolicyRequest: policyRequest });
+    }
 
     await Promise.all([rolesRequest, policyRequest]);
   },

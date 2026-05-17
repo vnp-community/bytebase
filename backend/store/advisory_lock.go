@@ -19,6 +19,11 @@ const (
 	// AdvisoryLockKeySchemaSyncer is used by the schema syncer to ensure only
 	// one replica runs periodic schema sync at a time.
 	AdvisoryLockKeySchemaSyncer AdvisoryLockKey = 1003
+
+	// Availability runners (SOL-AVAIL-002)
+	AdvisoryLockKeyLeader        AdvisoryLockKey = 2001 // Cluster leader election
+	AdvisoryLockKeyBackup        AdvisoryLockKey = 2002 // Backup coordinator
+	AdvisoryLockKeyHealthMonitor AdvisoryLockKey = 2003 // Health monitor
 )
 
 // AdvisoryLock holds a dedicated connection for a session-level advisory lock.

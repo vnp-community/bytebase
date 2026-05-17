@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import type { ReactNode } from "react";
 import { getLayerRoot, LAYER_SURFACE_CLASS } from "@/react/components/ui/layer";

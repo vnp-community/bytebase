@@ -8,6 +8,7 @@
 | **Priority** | P0 |
 | **Depends on** | None |
 | **Blocks** | T-010 |
+| **Status** | DONE |
 
 ## Objective
 

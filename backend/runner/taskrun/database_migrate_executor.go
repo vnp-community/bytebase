@@ -14,6 +14,7 @@ import (
 
 	"github.com/bytebase/bytebase/backend/common"
 	"github.com/bytebase/bytebase/backend/common/log"
+	"github.com/bytebase/bytebase/backend/metrics"
 	"github.com/bytebase/bytebase/backend/component/bus"
 	"github.com/bytebase/bytebase/backend/component/config"
 	"github.com/bytebase/bytebase/backend/component/dbfactory"
@@ -31,7 +32,7 @@ import (
 )
 
 // NewDatabaseMigrateExecutor creates a database migration task executor.
-func NewDatabaseMigrateExecutor(store *store.Store, dbFactory *dbfactory.DBFactory, bus *bus.Bus, schemaSyncer *schemasync.Syncer, profile *config.Profile) Executor {
+func NewDatabaseMigrateExecutor(store *store.Store, dbFactory *dbfactory.DBFactory, bus bus.EventBus, schemaSyncer *schemasync.Syncer, profile *config.Profile) Executor {
 	return &DatabaseMigrateExecutor{
 		store:        store,
 		dbFactory:    dbFactory,
@@ -45,7 +46,7 @@ func NewDatabaseMigrateExecutor(store *store.Store, dbFactory *dbfactory.DBFacto
 type DatabaseMigrateExecutor struct {
 	store        *store.Store
 	dbFactory    *dbfactory.DBFactory
-	bus          *bus.Bus
+	bus          bus.EventBus
 	schemaSyncer *schemasync.Syncer
 	profile      *config.Profile
 }
@@ -258,6 +259,8 @@ func (exec *DatabaseMigrateExecutor) runStandardMigration(ctx context.Context, d
 	_, migrationErr := driver.Execute(driverCtx, sheet.Statement, opts)
 
 	// Dump after migration and update changelog
+	// TASK-WEAK-003-3: Accumulate warnings instead of silently logging errors.
+	var warnings []string
 	update := &store.UpdateChangelogMessage{
 		ResourceID: changelogID,
 	}
@@ -267,6 +270,8 @@ func (exec *DatabaseMigrateExecutor) runStandardMigration(ctx context.Context, d
 		if err != nil {
 			opts.LogDatabaseSyncEnd(err.Error())
 			slog.Error("failed to sync database schema", log.BBError(err))
+			warnings = append(warnings, fmt.Sprintf("schema sync failed: %v", err))
+			metrics.SchemaSyncErrorsCounter.Inc()
 		} else {
 			opts.LogDatabaseSyncEnd("")
 			update.SyncHistory = &syncHistory
@@ -279,6 +284,8 @@ func (exec *DatabaseMigrateExecutor) runStandardMigration(ctx context.Context, d
 	}
 	if err := exec.store.UpdateChangelog(ctx, update); err != nil {
 		slog.Error("failed to update changelog", log.BBError(err))
+		warnings = append(warnings, fmt.Sprintf("changelog update failed: %v", err))
+		metrics.ChangelogUpdateErrorsCounter.Inc()
 	}
 
 	if migrationErr != nil {
@@ -287,6 +294,7 @@ func (exec *DatabaseMigrateExecutor) runStandardMigration(ctx context.Context, d
 
 	return &storepb.TaskRunResult{
 		HasPriorBackup: priorBackupDetail != nil && len(priorBackupDetail.Items) > 0,
+		Warnings:       warnings,
 	}, nil
 }
 
@@ -409,6 +417,8 @@ func (exec *DatabaseMigrateExecutor) runGhostMigration(ctx context.Context, driv
 	migrationErr := executeGhostMigration(ctx, driverCtx, task, sheet, instance, database, driver)
 
 	// Dump after migration and update changelog
+	// TASK-WEAK-003-3: Accumulate warnings instead of silently logging errors.
+	var warnings []string
 	update := &store.UpdateChangelogMessage{
 		ResourceID: changelogID,
 	}
@@ -417,6 +427,8 @@ func (exec *DatabaseMigrateExecutor) runGhostMigration(ctx context.Context, driv
 	if err != nil {
 		opts.LogDatabaseSyncEnd(err.Error())
 		slog.Error("failed to sync database schema", log.BBError(err))
+		warnings = append(warnings, fmt.Sprintf("schema sync failed: %v", err))
+		metrics.SchemaSyncErrorsCounter.Inc()
 	} else {
 		opts.LogDatabaseSyncEnd("")
 		update.SyncHistory = &syncHistory
@@ -428,13 +440,15 @@ func (exec *DatabaseMigrateExecutor) runGhostMigration(ctx context.Context, driv
 	}
 	if err := exec.store.UpdateChangelog(ctx, update); err != nil {
 		slog.Error("failed to update changelog", log.BBError(err))
+		warnings = append(warnings, fmt.Sprintf("changelog update failed: %v", err))
+		metrics.ChangelogUpdateErrorsCounter.Inc()
 	}
 
 	if migrationErr != nil {
 		return nil, migrationErr
 	}
 
-	return &storepb.TaskRunResult{}, nil
+	return &storepb.TaskRunResult{Warnings: warnings}, nil
 }
 
 func (exec *DatabaseMigrateExecutor) runVersionedRelease(ctx context.Context, driverCtx context.Context, task *store.TaskMessage, taskRunUID int64, release *store.ReleaseMessage, instance *store.InstanceMessage, database *store.DatabaseMessage, project *store.ProjectMessage) (*storepb.TaskRunResult, error) {
@@ -563,6 +577,8 @@ func (exec *DatabaseMigrateExecutor) runVersionedRelease(ctx context.Context, dr
 	}
 
 	// Update changelog after all files are processed
+	// TASK-WEAK-003-3: Accumulate warnings instead of silently logging errors.
+	var warnings []string
 	update := &store.UpdateChangelogMessage{
 		ResourceID: changelogID,
 	}
@@ -571,6 +587,8 @@ func (exec *DatabaseMigrateExecutor) runVersionedRelease(ctx context.Context, dr
 	if err != nil {
 		opts.LogDatabaseSyncEnd(err.Error())
 		slog.Error("failed to sync database schema", log.BBError(err))
+		warnings = append(warnings, fmt.Sprintf("schema sync failed: %v", err))
+		metrics.SchemaSyncErrorsCounter.Inc()
 	} else {
 		opts.LogDatabaseSyncEnd("")
 		update.SyncHistory = &syncHistory
@@ -582,6 +600,8 @@ func (exec *DatabaseMigrateExecutor) runVersionedRelease(ctx context.Context, dr
 	}
 	if err := exec.store.UpdateChangelog(ctx, update); err != nil {
 		slog.Error("failed to update changelog", log.BBError(err))
+		warnings = append(warnings, fmt.Sprintf("changelog update failed: %v", err))
+		metrics.ChangelogUpdateErrorsCounter.Inc()
 	}
 
 	if migrationErr != nil {
@@ -599,7 +619,7 @@ func (exec *DatabaseMigrateExecutor) runVersionedRelease(ctx context.Context, dr
 		return nil, errors.Wrapf(err, "failed to update database release to %s", release.ReleaseID)
 	}
 
-	return &storepb.TaskRunResult{}, nil
+	return &storepb.TaskRunResult{Warnings: warnings}, nil
 }
 
 func (exec *DatabaseMigrateExecutor) runDeclarativeRelease(ctx context.Context, driverCtx context.Context, task *store.TaskMessage, taskRunUID int64, release *store.ReleaseMessage, instance *store.InstanceMessage, database *store.DatabaseMessage, project *store.ProjectMessage) (*storepb.TaskRunResult, error) {
@@ -692,6 +712,8 @@ func (exec *DatabaseMigrateExecutor) runDeclarativeRelease(ctx context.Context, 
 	_, migrationErr := driver.Execute(driverCtx, migrationSQL, opts)
 
 	// Dump after migration and update changelog
+	// TASK-WEAK-003-3: Accumulate warnings instead of silently logging errors.
+	var warnings []string
 	update := &store.UpdateChangelogMessage{
 		ResourceID: changelogID,
 	}
@@ -700,6 +722,8 @@ func (exec *DatabaseMigrateExecutor) runDeclarativeRelease(ctx context.Context, 
 	if err != nil {
 		opts.LogDatabaseSyncEnd(err.Error())
 		slog.Error("failed to sync database schema", log.BBError(err))
+		warnings = append(warnings, fmt.Sprintf("schema sync failed: %v", err))
+		metrics.SchemaSyncErrorsCounter.Inc()
 	} else {
 		opts.LogDatabaseSyncEnd("")
 		update.SyncHistory = &syncHistory
@@ -711,6 +735,8 @@ func (exec *DatabaseMigrateExecutor) runDeclarativeRelease(ctx context.Context, 
 	}
 	if err := exec.store.UpdateChangelog(ctx, update); err != nil {
 		slog.Error("failed to update changelog", log.BBError(err))
+		warnings = append(warnings, fmt.Sprintf("changelog update failed: %v", err))
+		metrics.ChangelogUpdateErrorsCounter.Inc()
 	}
 
 	if migrationErr != nil {
@@ -729,7 +755,7 @@ func (exec *DatabaseMigrateExecutor) runDeclarativeRelease(ctx context.Context, 
 		return nil, errors.Wrapf(err, "failed to update database release for %q", database.DatabaseName)
 	}
 
-	return &storepb.TaskRunResult{}, nil
+	return &storepb.TaskRunResult{Warnings: warnings}, nil
 }
 
 func (exec *DatabaseMigrateExecutor) backupData(

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import type { ChangeEvent, InputHTMLAttributes, ReactElement } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";

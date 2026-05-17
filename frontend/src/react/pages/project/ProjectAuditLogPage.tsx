@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useMemo } from "react";
 import { AuditLogTable } from "@/react/components/AuditLogTable";
 import { FeatureAttention } from "@/react/components/FeatureAttention";

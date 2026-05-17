@@ -6,6 +6,7 @@
 | Priority | P2 |
 | Depends On | TASK-WEAK-006-1 |
 | Est. | M (~100 LoC) |
+| Status | ✅ Done |
 
 ## Objective
 
@@ -44,7 +45,20 @@ Document: column names = snake_case, JSONB keys = camelCase (from `protojson.Mar
 
 ## Acceptance Criteria
 
-- [ ] Generated column populated correctly from JSONB
-- [ ] B-tree index used for type filter (EXPLAIN)
-- [ ] Store uses generated column when filter present
-- [ ] Naming convention documented
+- [x] Generated column populated correctly from JSONB
+- [x] B-tree index used for type filter (EXPLAIN)
+- [x] Store uses generated column when filter present
+- [x] Naming convention documented
+
+## Implementation Notes
+
+Created files:
+- `backend/migrator/migration/3.18/0005_generated_columns.sql` — migration
+- `docs/dev/jsonb-naming-convention.md` — developer documentation
+
+Modified:
+- `backend/store/issue.go` — ListIssues now queries `issue.issue_type` instead
+  of `issue.type` when filtering by Types, leveraging the B-tree index on the
+  generated column.
+- `backend/migrator/migration/LATEST.sql` — schema updated with generated column
+  and index.

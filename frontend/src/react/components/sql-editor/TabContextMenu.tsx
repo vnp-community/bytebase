@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useTranslation } from "react-i18next";

@@ -44,8 +44,8 @@ if s.profile.HA {
 
 ## Acceptance Criteria
 
-- [ ] Advisory lock 2001 for leader election
-- [ ] `IsLeader()` exported method
-- [ ] Auto-release on ctx cancellation
-- [ ] Only 1 leader at a time (verified by PG advisory lock)
-- [ ] `go build ./backend/runner/leader/...` passes
+- [x] Advisory lock 2001 for leader election
+- [x] `IsLeader()` exported method
+- [x] Auto-release on ctx cancellation
+- [x] Only 1 leader at a time (verified by PG advisory lock)
+- [x] `go build ./backend/runner/leader/...` passes

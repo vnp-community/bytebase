@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { EngineIcon } from "@/react/components/EngineIcon";
 import { useVueState } from "@/react/hooks/useVueState";
 import { useDatabaseV1Store } from "@/store";

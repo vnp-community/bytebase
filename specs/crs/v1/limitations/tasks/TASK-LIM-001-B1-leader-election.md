@@ -62,8 +62,15 @@ type LeaderRunner struct {
 
 ## Acceptance Criteria
 
-- [ ] Advisory lock acquired/released correctly
-- [ ] Only 1 replica holds lock per lockID (test with 2 concurrent electors)
-- [ ] Session-level lock auto-releases on connection close (crash safety)
-- [ ] LeaderRunner starts inner runner only when elected
-- [ ] Prometheus metric `bytebase_leader_status` exported
+- [x] Advisory lock acquired/released correctly
+- [x] Only 1 replica holds lock per lockID (test with 2 concurrent electors)
+- [x] Session-level lock auto-releases on connection close (crash safety)
+- [x] LeaderRunner starts inner runner only when elected
+- [x] Prometheus metric `bytebase_leader_status` exported
+
+## Status: ✅ DONE
+
+- **Completed**: 2026-05-10
+- **Files**: `backend/component/leader/election.go`, `backend/component/leader/election_test.go`, `backend/runner/leaderrunner/runner.go`
+- **Notes**: LeaderElector uses a dedicated `*sql.Conn` to hold the session-level advisory lock — auto-releases on crash. LeaderRunner polls `IsLeader()` every 1s and starts/stops inner runner on leadership transitions. 5 lock IDs defined (100001–100005). Prometheus gauge `bytebase_leader_status` exported via `promauto`.
+

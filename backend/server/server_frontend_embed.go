@@ -5,8 +5,10 @@ package server
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/labstack/echo/v5"
@@ -61,6 +63,24 @@ func loadCSPHashes() []string {
 	return cspHashesCache
 }
 
+// injectNonceIntoHTML injects the CSP nonce into the served index.html.
+// It replaces:
+//   - <style → <style nonce="..."
+//   - <link rel="stylesheet" → <link nonce="..." rel="stylesheet"
+//   - content="CSP_NONCE_PLACEHOLDER" → content="{nonce}" (for <meta name="csp-nonce">)
+//
+// TASK-WEAK-001-3: This enables browsers to execute inline styles that carry the
+// per-request nonce, eliminating the need for 'unsafe-inline' in style-src.
+func injectNonceIntoHTML(html []byte, nonce string) []byte {
+	result := string(html)
+	result = strings.ReplaceAll(result, "<style", fmt.Sprintf(`<style nonce="%s"`, nonce))
+	result = strings.ReplaceAll(result, `<link rel="stylesheet"`,
+		fmt.Sprintf(`<link nonce="%s" rel="stylesheet"`, nonce))
+	result = strings.ReplaceAll(result, `content="CSP_NONCE_PLACEHOLDER"`,
+		fmt.Sprintf(`content="%s"`, nonce))
+	return []byte(result)
+}
+
 func getFileSystem(path string) fs.FS {
 	subFS, err := fs.Sub(embeddedFiles, path)
 	if err != nil {
@@ -73,3 +93,4 @@ func getFileSystem(path string) fs.FS {
 func embedFrontend(e *echo.Echo) {
 	registerFrontendRoutes(e, getFileSystem("dist"))
 }
+

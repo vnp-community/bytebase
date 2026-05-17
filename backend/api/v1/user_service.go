@@ -763,8 +763,8 @@ func validateEmailWithDomains(ctx context.Context, licenseService *enterprise.Li
 		return err
 	}
 	if licenseService.IsFeatureEnabled(ctx, workspaceID, v1pb.PlanFeature_FEATURE_USER_EMAIL_DOMAIN_RESTRICTION) != nil {
-		// nolint:nilerr
-		// feature not enabled, only validate email and skip domain restriction.
+		//nolint:nilerr // feature not enabled — license check "error" means feature unavailable, not a failure.
+		// Only validate email format and skip domain restriction.
 		if err := common.ValidateEmail(email); err != nil {
 			return connect.NewError(connect.CodeInvalidArgument, errors.Errorf("invalid email: %v", err.Error()))
 		}

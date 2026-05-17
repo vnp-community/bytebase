@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 /**
  * SheetTree — React port of SheetTree.vue (Stage 12, Phase 3)
  *

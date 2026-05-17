@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { ChevronLeft, Zap } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/react/components/ui/button";

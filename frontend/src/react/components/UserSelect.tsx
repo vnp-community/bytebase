@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Combobox, type ComboboxOption } from "@/react/components/ui/combobox";
 import { useUserStore } from "@/store";

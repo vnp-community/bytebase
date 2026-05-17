@@ -293,6 +293,64 @@ func (s *Store) UpdateTaskRunStartAt(ctx context.Context, projectID string, task
 	return nil
 }
 
+// UpdateTaskRunAssignedNode updates the assigned node for a task run.
+func (s *Store) UpdateTaskRunAssignedNode(ctx context.Context, taskRunID int64, assignedNode string) error {
+	q := qb.Q().Space(`
+		UPDATE task_run
+		SET assigned_node = ?, updated_at = now()
+		WHERE id = ?
+	`, assignedNode, taskRunID)
+
+	query, args, err := q.ToSQL()
+	if err != nil {
+		return errors.Wrapf(err, "failed to build sql")
+	}
+
+	if _, err := s.GetDB().ExecContext(ctx, query, args...); err != nil {
+		return errors.Wrapf(err, "failed to update task run assigned node")
+	}
+	return nil
+}
+
+// FindOrphanedTaskRuns finds RUNNING task runs assigned to dead nodes.
+func (s *Store) FindOrphanedTaskRuns(ctx context.Context, activeNodes []string) ([]*TaskRunMessage, error) {
+	q := qb.Q().Space(`
+		SELECT id, project
+		FROM task_run
+		WHERE status = ?
+	`, storepb.TaskRun_RUNNING.String())
+
+	if len(activeNodes) > 0 {
+		q.And("assigned_node != '' AND assigned_node != ALL(?)", activeNodes)
+	} else {
+		q.And("assigned_node != ''")
+	}
+
+	query, args, err := q.ToSQL()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to build sql")
+	}
+
+	rows, err := s.GetDB().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to find orphaned task runs")
+	}
+	defer rows.Close()
+
+	var orphans []*TaskRunMessage
+	for rows.Next() {
+		var tr TaskRunMessage
+		if err := rows.Scan(&tr.ID, &tr.ProjectID); err != nil {
+			return nil, err
+		}
+		orphans = append(orphans, &tr)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return orphans, nil
+}
+
 // CreatePendingTaskRuns creates pending task runs.
 // This operation is idempotent and safe for concurrent calls:
 // - Uses WHERE NOT EXISTS to skip tasks that already have active (PENDING/RUNNING/DONE) task runs

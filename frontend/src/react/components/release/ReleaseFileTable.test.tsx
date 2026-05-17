@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { create } from "@bufbuild/protobuf";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";

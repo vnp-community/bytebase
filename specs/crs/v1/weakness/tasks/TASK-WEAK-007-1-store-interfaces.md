@@ -6,6 +6,8 @@
 | Priority | P0 |
 | Depends On | — |
 | Est. | M (~120 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-12 |
 
 ## Objective
 
@@ -17,40 +19,40 @@ Extract role-based interfaces from concrete `Store` struct to enable unit testin
 |--------|------|
 | CREATE | `backend/store/interfaces.go` |
 
-## Specification
+## Implementation Notes
 
-Define role-based interfaces (Reader/Writer per entity):
+### Delivered
 
-```go
-type UserReader interface {
-    GetUser(ctx context.Context, find *FindUserMessage) (*UserMessage, error)
-    GetUserByEmail(ctx context.Context, workspace, email string) (*UserMessage, error)
-    ListUsers(ctx context.Context, find *FindUserMessage) ([]*UserMessage, error)
-}
+- **20+ role-based interfaces** extracted into `backend/store/interfaces.go` (~360 LoC):
+  - `UserReader`, `UserWriter`, `UserStore` (composed)
+  - `ProjectReader`, `ProjectWriter`
+  - `PlanReader`, `IssueReader`, `DatabaseReader`, `DatabaseWriter`
+  - `InstanceReader`, `PolicyReader`, `SettingReader`, `WorkspaceReader`
+  - `AuditLogWriter`, `DBSchemaReader`, `SheetReader`, `RoleReader`
+  - `ChangelogReader`, `TaskStore`, `TaskRunStore`, `QueryHistoryStore`
+  - `AccessGrantReader`, `ExportArchiveReader`, `AccountReader`
+  - `SignalWriter`, `PlanWebhookWriter`, `SyncHistoryReader`, `AuthStore`
+  - `DataStore` — superset interface for backward compatibility
 
-type UserWriter interface {
-    CreateUser(ctx context.Context, create *UserMessage) (*UserMessage, error)
-    UpdateUser(ctx context.Context, id int, patch *UpdateUserMessage) (*UserMessage, error)
-}
+- **Compile-time assertions** in `backend/store/interfaces_verify_test.go`:
+  ```go
+  var _ UserReader = (*Store)(nil)
+  var _ UserWriter = (*Store)(nil)
+  // ...20+ assertions
+  ```
 
-type PlanReader interface { /* GetPlan, ListPlans */ }
-type IssueReader interface { /* GetIssue, ListIssues */ }
-type ChangelogWriter interface { /* CreateChangelog, UpdateChangelog */ }
-type PolicyReader interface { /* GetPolicy, ListPolicies */ }
+- **Design principle**: Small role interfaces > one massive StoreInterface. Services declare only what they need.
+
+### Verification
+
+```bash
+go build ./backend/store/...   # ✅ passes
+go test ./backend/store/...    # ✅ passes
 ```
-
-Compile-time verification:
-```go
-var _ UserReader = (*Store)(nil)
-var _ UserWriter = (*Store)(nil)
-// ...etc
-```
-
-**Design**: Small role interfaces > one massive StoreInterface. Services declare only what they need.
 
 ## Acceptance Criteria
 
-- [ ] 6+ role interfaces defined
-- [ ] Compile-time `var _` assertions pass
-- [ ] Existing code unaffected (additive file)
-- [ ] `go build ./backend/store/...` passes
+- [x] 6+ role interfaces defined (20+ delivered)
+- [x] Compile-time `var _` assertions pass
+- [x] Existing code unaffected (additive file)
+- [x] `go build ./backend/store/...` passes

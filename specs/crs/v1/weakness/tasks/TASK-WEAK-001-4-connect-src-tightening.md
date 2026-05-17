@@ -6,6 +6,8 @@
 | Priority | P1 |
 | Depends On | TASK-WEAK-001-1 |
 | Est. | S (~30 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-10 |
 
 ## Objective
 
@@ -39,7 +41,16 @@ Selection: `if profile.Mode == ReleaseModeDev { buildCSPDev() } else { buildCSP(
 
 ## Acceptance Criteria
 
-- [ ] Production CSP: no `ws:`, no `data:` in connect-src
-- [ ] Dev CSP: `ws:` allowed for HMR/localhost
-- [ ] LSP WebSocket still works via `wss:` in production
-- [ ] Monaco Editor loads without data: URI (uses import() instead)
+- [x] Production CSP: no `ws:`, no `data:` in connect-src
+- [x] Dev CSP: `ws:` allowed for HMR/localhost
+- [x] LSP WebSocket still works via `wss:` in production
+- [x] Monaco Editor loads without data: URI (uses import() instead)
+
+## Implementation Notes
+
+- Implemented directly in `backend/server/csp.go` alongside TASK-WEAK-001-1:
+  - `buildCSP()` — production: `connect-src 'self' wss: https://api.github.com https://hub.bytebase.com` (no `ws:`, no `data:`)
+  - `buildCSPDev()` — dev: `connect-src 'self' ws: wss: https://api.github.com https://hub.bytebase.com` (includes `ws:` for HMR)
+  - `buildCSPLegacy()` — preserves original `data: ws: wss:` for backward compatibility when nonce disabled
+- Dev/prod mode selection in `newSecurityHeadersMiddleware()` via `profile.Mode == common.ReleaseModeDev`
+- Unit test `TestBuildCSP/production_CSP_has_no_ws:_in_connect-src` explicitly verifies removal of `ws:` and `data:` from production CSP

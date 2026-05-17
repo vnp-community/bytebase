@@ -15,6 +15,7 @@ import (
 	"github.com/bytebase/bytebase/backend/common"
 	"github.com/bytebase/bytebase/backend/common/log"
 	"github.com/bytebase/bytebase/backend/component/config"
+	"github.com/bytebase/bytebase/backend/component/readiness"
 	"github.com/bytebase/bytebase/backend/component/sampleinstance"
 	"github.com/bytebase/bytebase/backend/enterprise"
 	storepb "github.com/bytebase/bytebase/backend/generated-go/store"
@@ -32,6 +33,7 @@ type ActuatorService struct {
 	licenseService        *enterprise.LicenseService
 	schemaSyncer          *schemasync.Syncer
 	sampleInstanceManager *sampleinstance.Manager
+	readinessChecker      *readiness.Checker
 }
 
 // NewActuatorService creates a new ActuatorService.
@@ -48,6 +50,7 @@ func NewActuatorService(
 		licenseService:        licenseService,
 		schemaSyncer:          schemaSyncer,
 		sampleInstanceManager: sampleInstanceManager,
+		readinessChecker:      readiness.NewChecker(store, profile, time.Now()),
 	}
 }
 
@@ -80,6 +83,59 @@ func (s *ActuatorService) GetActuatorInfo(
 		return nil, err
 	}
 	return connect.NewResponse(info), nil
+}
+
+// GetReadinessReport evaluates production readiness and returns the report.
+// This is exposed as a JSON endpoint rather than ConnectRPC since the response
+// types are defined in the readiness package, not in protobuf.
+func (s *ActuatorService) GetReadinessReport(ctx context.Context) *readiness.ReadinessReport {
+	report := s.readinessChecker.Check(ctx)
+
+	// Override ShowWarning if dismissed.
+	if report.ShowWarning {
+		dismissed, err := s.isReadinessDismissed(ctx)
+		if err != nil {
+			slog.Debug("failed to check readiness dismiss status", log.BBError(err))
+		}
+		if dismissed {
+			report.ShowWarning = false
+		}
+	}
+
+	return report
+}
+
+// DismissReadinessWarning stores a dismissal for the production readiness warning.
+// The dismissal expires after 30 days.
+func (s *ActuatorService) DismissReadinessWarning(
+	ctx context.Context,
+	_ *connect.Request[emptypb.Empty],
+) (*connect.Response[emptypb.Empty], error) {
+	dismissUntil := time.Now().Add(30 * 24 * time.Hour).Format(time.RFC3339)
+	_, err := s.store.GetDB().ExecContext(ctx,
+		`INSERT INTO server_config (key, value) VALUES ('readiness_dismiss_until', $1)
+		 ON CONFLICT (key) DO UPDATE SET value = $1`,
+		dismissUntil,
+	)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, errors.Wrap(err, "failed to dismiss readiness warning"))
+	}
+	return connect.NewResponse(&emptypb.Empty{}), nil
+}
+
+// isReadinessDismissed checks if the readiness warning was dismissed and hasn't expired.
+func (s *ActuatorService) isReadinessDismissed(ctx context.Context) (bool, error) {
+	var value string
+	err := s.store.GetDB().QueryRowContext(ctx,
+		`SELECT value FROM server_config WHERE key = 'readiness_dismiss_until'`).Scan(&value)
+	if err != nil {
+		return false, err
+	}
+	dismissUntil, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return false, err
+	}
+	return time.Now().Before(dismissUntil), nil
 }
 
 // DeleteCache deletes the cache.

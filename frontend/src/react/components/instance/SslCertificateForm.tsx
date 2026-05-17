@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Info } from "lucide-react";
 import { type DragEvent, useCallback } from "react";
 import { useTranslation } from "react-i18next";

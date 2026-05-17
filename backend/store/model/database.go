@@ -189,6 +189,10 @@ func NewDatabaseMetadata(
 	return dbMetadata
 }
 
+func NewDatabaseMetadataFromProto(metadata *storepb.DatabaseSchemaMetadata) *DatabaseMetadata {
+	return NewDatabaseMetadata(metadata, nil, nil, storepb.Engine_ENGINE_UNSPECIFIED, false)
+}
+
 func (d *DatabaseMetadata) GetProto() *storepb.DatabaseSchemaMetadata {
 	return d.proto
 }

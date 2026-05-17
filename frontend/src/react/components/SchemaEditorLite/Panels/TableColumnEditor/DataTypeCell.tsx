@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useMemo } from "react";
 import { Input } from "@/react/components/ui/input";
 import type { Engine } from "@/types/proto-es/v1/common_pb";

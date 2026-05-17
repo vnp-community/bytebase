@@ -294,7 +294,7 @@ func checkAndGetDataSourceQueriable(
 		return dataSource, nil
 	}
 
-	//nolint:nilerr
+	//nolint:nilerr // feature not enabled — license check "error" means feature unavailable, not a failure; return admin data source as-is.
 	if err := licenseService.IsFeatureEnabled(ctx, common.GetWorkspaceIDFromContext(ctx), v1pb.PlanFeature_FEATURE_QUERY_POLICY); err != nil {
 		return dataSource, nil
 	}

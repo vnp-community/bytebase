@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import i18n from "@/plugins/i18n";
 import { useVueState } from "@/react/hooks/useVueState";
 import { router } from "@/router";

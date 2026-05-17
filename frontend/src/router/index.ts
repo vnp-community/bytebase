@@ -1,4 +1,5 @@
 import { nextTick } from "vue";
+import { validateRedirectUrl } from "@/utils/redirect-validator";
 import { setDocumentTitle } from "@/utils";
 import {
   createRouter,
@@ -25,6 +26,12 @@ import authRoutes, {
   AUTH_SIGNIN_MODULE,
   OAUTH2_CONSENT_MODULE,
 } from "./auth";
+
+declare module "vue-router" {
+  interface RouteMeta {
+    preserveQuery?: string[];
+  }
+}
 
 // Query params that are only meaningful on the signin page (pre-login).
 // They're forwarded from the original URL to signin and stripped from the post-login redirect.
@@ -82,7 +89,7 @@ export const router = createRouter({
   },
 });
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   console.debug("Router %s -> %s", from.name, to.name);
 
   // === SPECIAL CASES - Allow direct access ===
@@ -154,26 +161,19 @@ router.beforeEach((to, from, next) => {
     // Validate relay_state to prevent open redirect attacks
     let redirect = "/";
     if (relayState && typeof relayState === "string") {
-      // Only allow relative URLs, reject protocol-relative URLs (//)
-      if (relayState.startsWith("/") && !relayState.startsWith("//")) {
-        redirect = relayState;
-      }
+      redirect = validateRedirectUrl(relayState);
     } else if (redirectParam) {
-      redirect = redirectParam;
+      redirect = validateRedirectUrl(redirectParam);
     }
 
     next(redirect);
     return;
   }
 
-  // Auth pages: Reset stores and allow access
+  // Auth pages: Allow access without clearing caches.
+  // TASK-W-023: Store resets moved to logout() — visiting auth page
+  // should NOT clear caches so browser-back preserves data.
   if (isAuthRelatedRoute(to.name as string)) {
-    useDatabaseV1Store().reset();
-    useProjectV1Store().reset();
-    useInstanceV1Store().reset();
-    import("@/plugins/ai/store").then(({ useConversationStore }) => {
-      useConversationStore().reset();
-    });
     next();
     return;
   }

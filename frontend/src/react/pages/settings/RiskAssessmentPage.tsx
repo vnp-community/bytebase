@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useTranslation } from "react-i18next";
 import { FeatureAttention } from "@/react/components/FeatureAttention";
 import { Badge } from "@/react/components/ui/badge";

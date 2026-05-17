@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { ChevronRight, Database, SquareStack } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { EngineIcon } from "@/react/components/EngineIcon";

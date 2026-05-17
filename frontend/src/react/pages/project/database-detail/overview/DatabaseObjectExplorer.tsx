@@ -1,17 +1,19 @@
-import { useEffect, useState } from "react";
+// i18n: i18next | use t("key") from useTranslation()
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { fromJson, create } from "@bufbuild/protobuf";
 import { getColumnDefaultValuePlaceholder } from "@/react/components/SchemaEditorLite/core/columnDefaultValue";
 import { Input } from "@/react/components/ui/input";
-import { useVueState } from "@/react/hooks/useVueState";
+import { usePlanFeature } from "@/react/hooks/useAppState";
+import { useDatabaseCatalog } from "@/react/hooks/queries/useDatabaseCatalog";
+import { useDatabaseMetadata } from "@/react/hooks/queries/useSchema";
+import { useSetting } from "@/react/hooks/queries/useSetting";
 import { router } from "@/router";
 import {
-  featureToRef,
   getColumnCatalog,
   getTableCatalog,
-  useDatabaseCatalog,
-  useDBSchemaV1Store,
-  useSettingV1Store,
 } from "@/store";
+import { DatabaseCatalogSchema } from "@/types/proto-es/v1/database_catalog_service_pb";
 import { Engine } from "@/types/proto-es/v1/common_pb";
 import type {
   Database,
@@ -21,7 +23,7 @@ import type {
   TaskMetadata,
 } from "@/types/proto-es/v1/database_service_pb";
 import { TablePartitionMetadata_Type } from "@/types/proto-es/v1/database_service_pb";
-import { Setting_SettingName } from "@/types/proto-es/v1/setting_service_pb";
+import { DataClassificationSettingSchema } from "@/types/proto-es/v1/setting_service_pb";
 import { PlanFeature } from "@/types/proto-es/v1/subscription_service_pb";
 import {
   bytesToString,
@@ -72,58 +74,65 @@ export function DatabaseObjectExplorer({
   onExternalTableSearchKeywordChange: (value: string) => void;
 }) {
   const { t } = useTranslation();
-  const dbSchemaStore = useDBSchemaV1Store();
-  const settingStore = useSettingV1Store();
   const databaseEngine = getDatabaseEngine(database);
   const supportsSchema = hasSchemaProperty(databaseEngine);
-  const schemaList = useVueState(() =>
-    dbSchemaStore.getSchemaList(database.name)
-  );
-  const tableList = useVueState(() =>
-    dbSchemaStore.getTableList({
-      database: database.name,
-      schema: selectedSchemaName,
-    })
-  );
-  const viewList = useVueState(() =>
-    dbSchemaStore.getViewList({
-      database: database.name,
-      schema: selectedSchemaName,
-    })
-  );
-  const extensionList = useVueState(() =>
-    dbSchemaStore.getExtensionList(database.name)
-  );
-  const externalTableList = useVueState(() =>
-    dbSchemaStore.getExternalTableList({
-      database: database.name,
-      schema: selectedSchemaName,
-    })
-  );
-  const functionList = useVueState(() =>
-    dbSchemaStore.getFunctionList({
-      database: database.name,
-      schema: selectedSchemaName,
-    })
-  );
-  const routeTable = useVueState(() => {
+
+  const { data: dbMetadata } = useDatabaseMetadata(database.name);
+  const schemaList = dbMetadata?.schemas ?? [];
+  
+  const tableList = useMemo(() => {
+    if (selectedSchemaName) return schemaList.find(s => s.name === selectedSchemaName)?.tables ?? [];
+    return schemaList.flatMap(s => s.tables);
+  }, [schemaList, selectedSchemaName]);
+  
+  const viewList = useMemo(() => {
+    if (selectedSchemaName) return schemaList.find(s => s.name === selectedSchemaName)?.views ?? [];
+    return schemaList.flatMap(s => s.views);
+  }, [schemaList, selectedSchemaName]);
+  
+  const extensionList = dbMetadata?.extensions ?? [];
+  
+  const externalTableList = useMemo(() => {
+    if (selectedSchemaName) return schemaList.find(s => s.name === selectedSchemaName)?.externalTables ?? [];
+    return schemaList.flatMap(s => s.externalTables);
+  }, [schemaList, selectedSchemaName]);
+  
+  const functionList = useMemo(() => {
+    if (selectedSchemaName) return schemaList.find(s => s.name === selectedSchemaName)?.functions ?? [];
+    return schemaList.flatMap(s => s.functions);
+  }, [schemaList, selectedSchemaName]);
+
+  const [routeTable, setRouteTable] = useState(() => {
     const table = router.currentRoute.value.query.table;
     return typeof table === "string" ? table : "";
   });
-  const databaseMetadata = useVueState(() =>
-    dbSchemaStore.getDatabaseMetadata(database.name)
-  );
-  const hasSensitiveDataFeature = useVueState(
-    () => featureToRef(PlanFeature.FEATURE_DATA_MASKING).value
-  );
-  const databaseCatalog = useDatabaseCatalog(database.name, false);
-  const catalog = useVueState(() => databaseCatalog.value);
+
+  useEffect(() => {
+    return router.afterEach((to) => {
+      const table = to.query.table;
+      setRouteTable(typeof table === "string" ? table : "");
+    });
+  }, []);
+
+  const databaseMetadata = dbMetadata ?? ({ schemas: [] } as any);
+
+  const hasSensitiveDataFeature = usePlanFeature(PlanFeature.FEATURE_DATA_MASKING);
+
+  const { data: catalogData } = useDatabaseCatalog(database.name);
+  const catalog = catalogData ?? create(DatabaseCatalogSchema, { name: `${database.name}/catalog` });
   const project = getDatabaseProject(database);
-  const classificationConfig = useVueState(() =>
-    settingStore.getProjectClassification(
-      project.dataClassificationConfigId ?? ""
-    )
-  );
+
+  const { data: classificationSettingResponse } = useSetting("settings/DATA_CLASSIFICATION");
+  const classificationConfig = useMemo(() => {
+    if (!classificationSettingResponse?.value) return undefined;
+    try {
+      const parsed = fromJson(DataClassificationSettingSchema, JSON.parse(classificationSettingResponse.value));
+      return parsed.configs.find(c => c.id === project.dataClassificationConfigId);
+    } catch {
+      return undefined;
+    }
+  }, [classificationSettingResponse?.value, project.dataClassificationConfigId]);
+
   const canUpdateCatalog = hasProjectPermissionV2(
     project,
     "bb.databaseCatalogs.update"
@@ -256,12 +265,7 @@ export function DatabaseObjectExplorer({
       }
     : undefined;
 
-  useEffect(() => {
-    void settingStore.getOrFetchSettingByName(
-      Setting_SettingName.DATA_CLASSIFICATION,
-      true
-    );
-  }, [settingStore]);
+
 
   useEffect(() => {
     setSelectedTableName((current) =>

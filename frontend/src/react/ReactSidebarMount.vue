@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <div ref="container" class="h-full" />
 </template>
@@ -7,17 +8,19 @@ defineOptions({ inheritAttrs: false });
 
 import { onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import type { ReactRoot } from "./bridge-types";
 
 const container = ref<HTMLElement>();
-// biome-ignore lint/suspicious/noExplicitAny: React Root type from dynamic import
-let root: any = null; // eslint-disable-line @typescript-eslint/no-explicit-any
+let root: ReactRoot | null = null;
 const { locale } = useI18n();
+const abortController = new AbortController();
 
 async function render() {
   if (!container.value) return;
   const { mountSidebar, updateSidebarLocale } = await import("./mountSidebar");
+  if (abortController.signal.aborted) return;
   if (!root) {
-    root = await mountSidebar(container.value, locale.value);
+    root = await mountSidebar(container.value, locale.value, abortController.signal);
   } else {
     await updateSidebarLocale(root, locale.value);
   }
@@ -26,6 +29,7 @@ async function render() {
 onMounted(() => render());
 watch(locale, () => render());
 onUnmounted(() => {
+  abortController.abort();
   root?.unmount();
   root = null;
 });

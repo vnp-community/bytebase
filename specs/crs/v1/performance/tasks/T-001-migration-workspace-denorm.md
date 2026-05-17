@@ -8,6 +8,7 @@
 | **Priority** | P0 — Foundation |
 | **Depends on** | None |
 | **Blocks** | T-004, T-005 |
+| **Status** | DONE |
 
 ## Objective
 

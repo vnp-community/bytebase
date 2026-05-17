@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Menu as BaseMenu } from "@base-ui/react/menu";
 import type { ComponentProps } from "react";
 import { cn } from "@/react/lib/utils";

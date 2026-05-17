@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { act, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, test } from "vitest";

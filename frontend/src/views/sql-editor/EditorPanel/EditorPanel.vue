@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <div class="w-full flex-1 flex flex-row items-stretch overflow-hidden">
     <Panels>

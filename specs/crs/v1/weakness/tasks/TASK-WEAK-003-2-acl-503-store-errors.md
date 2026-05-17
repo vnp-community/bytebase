@@ -6,6 +6,9 @@
 | Priority | P0 |
 | Depends On | TASK-WEAK-003-1 |
 | Est. | S (~40 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-12 |
+| Notes | Added `isStoreError()` helper detecting sql.Err*, pgx/pgconn patterns. Store errors → 503 `CodeUnavailable` (retryable). Logic errors → 500 `CodeInternal`. |
 
 ## Objective
 

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { afterEach, describe, expect, test } from "vitest";
 import { getLayerRoot, LAYER_ROOT_ID, LAYER_Z_INDEX } from "./layer";
 

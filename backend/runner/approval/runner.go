@@ -26,13 +26,13 @@ import (
 // Runner is the runner for finding approval templates for issues.
 type Runner struct {
 	store          *store.Store
-	bus            *bus.Bus
+	bus            bus.EventBus
 	webhookManager *webhook.Manager
 	licenseService *enterprise.LicenseService
 }
 
 // NewRunner creates a new runner.
-func NewRunner(store *store.Store, bus *bus.Bus, webhookManager *webhook.Manager, licenseService *enterprise.LicenseService) *Runner {
+func NewRunner(store *store.Store, bus bus.EventBus, webhookManager *webhook.Manager, licenseService *enterprise.LicenseService) *Runner {
 	return &Runner{
 		store:          store,
 		bus:            bus,

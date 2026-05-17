@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { createContext, useContext } from "react";
 import type { SchemaEditorContextValue } from "./types";
 

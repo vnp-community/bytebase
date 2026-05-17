@@ -24,13 +24,13 @@ type RolloutService struct {
 	v1connect.UnimplementedRolloutServiceHandler
 	store          *store.Store
 	dbFactory      *dbfactory.DBFactory
-	bus            *bus.Bus
+	bus            bus.EventBus
 	webhookManager *webhook.Manager
 	iamManager     *iam.Manager
 }
 
 // NewRolloutService returns a rollout service instance.
-func NewRolloutService(store *store.Store, dbFactory *dbfactory.DBFactory, bus *bus.Bus, webhookManager *webhook.Manager, iamManager *iam.Manager) *RolloutService {
+func NewRolloutService(store *store.Store, dbFactory *dbfactory.DBFactory, bus bus.EventBus, webhookManager *webhook.Manager, iamManager *iam.Manager) *RolloutService {
 	return &RolloutService{
 		store:          store,
 		dbFactory:      dbFactory,

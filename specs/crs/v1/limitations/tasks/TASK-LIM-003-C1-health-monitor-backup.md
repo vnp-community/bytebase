@@ -41,7 +41,21 @@ Only runs when `profile.UseEmbedDB() == true`.
 
 ## Acceptance Criteria
 
-- [ ] Health metrics exported every 30s
-- [ ] Backup created on schedule with compression
-- [ ] Old backups rotated (keep last N)
-- [ ] Both components no-op for external PG
+- [x] Health metrics exported every 30s → **DONE**: `PGHealthMonitor.Run()` with 30s ticker, 4 Prometheus gauges
+- [x] Backup created on schedule with compression → **DONE**: `BackupScheduler` runs daily at configurable hour, `pg_dump --compress 6`
+- [x] Old backups rotated (keep last N) → **DONE**: `rotateBackups()` keeps last 7 (configurable via `PG_BACKUP_RETENTION`)
+- [x] Both components no-op for external PG → **DONE**: Early return when `!profile.UseEmbedDB()`
+
+## Implementation Notes
+
+- Created `backend/component/pghealth/monitor.go` (~160 LoC)
+  - 4 Prometheus gauges: `bytebase_pg_active_connections`, `bytebase_pg_database_size_mb`, `bytebase_pg_longest_query_seconds`, `bytebase_pg_wal_size_mb`
+  - Uses `pg_stat_activity`, `pg_database_size()`, `pg_current_wal_lsn()` queries
+  - Follows Runner interface pattern (`Run(ctx, *sync.WaitGroup)`)
+- Created `backend/component/pgbackup/scheduler.go` (~230 LoC)
+  - Daily schedule at configurable hour (default 2 AM), checked every 15 minutes
+  - Environment variable overrides: `PG_BACKUP_DIR`, `PG_BACKUP_RETENTION`, `PG_BACKUP_SCHEDULE_HOUR`
+  - Rotation based on backup file prefix/suffix pattern matching
+- Wired both into `server.go` `Run()` method — run on all replicas (both are embedded-PG-only)
+
+**Status: ✅ DONE**

@@ -44,7 +44,7 @@ func (f *DBFactory) GetDriver(ctx, instance, database) (db.Driver, error) {
 
 ## Acceptance Criteria
 
-- [ ] Per-instance circuit breaker (lazy-created, map key = ResourceID)
-- [ ] `ErrCircuitOpen` → gRPC `codes.Unavailable`
-- [ ] Existing `GetDriver` renamed to `getDriverInternal` (unexported)
-- [ ] `go build ./backend/component/dbfactory/...` passes
+- [x] Per-instance circuit breaker (lazy-created, map key = ResourceID)
+- [x] `ErrCircuitOpen` → gRPC `codes.Unavailable`
+- [x] Existing `GetDriver` renamed to `getDriverInternal` (unexported)
+- [x] `go build ./backend/component/dbfactory/...` passes

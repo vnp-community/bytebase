@@ -57,8 +57,23 @@ When `X-Auth-Mode: token` header present:
 
 ## Acceptance Criteria
 
-- [ ] CORS headers set when `CORS_ALLOWED_ORIGINS` configured
-- [ ] No CORS middleware when env var empty (backward compat)
-- [ ] Bearer token auth works alongside cookie auth
-- [ ] Login returns tokens in body when `X-Auth-Mode: token`
-- [ ] Existing cookie auth unaffected
+- [x] CORS headers set when `CORS_ALLOWED_ORIGINS` configured → **DONE**: New `else if` branch in `configureEchoRouters()` parses env var
+- [x] No CORS middleware when env var empty (backward compat) → **DONE**: Only activates when `os.Getenv("CORS_ALLOWED_ORIGINS") != ""`
+- [x] Bearer token auth works alongside cookie auth → **DONE**: `GetTokenFromHeaders()` already checks Authorization header first (Priority 1: Bearer, Priority 2: Cookie) — no changes needed
+- [x] Login returns tokens in body when `X-Auth-Mode: token` → **DONE**: New token-mode branch in `finalizeLogin()` sets `response.Token` + `X-Refresh-Token` header
+- [x] Existing cookie auth unaffected → **DONE**: Token mode is `else if` before existing `req.Msg.Web` branch
+
+## Implementation Notes
+
+- Modified `backend/server/echo_routes.go`:
+  - Added `os` import
+  - Production CORS with `CORS_ALLOWED_ORIGINS` env var (comma-separated origins)
+  - Allows `Authorization`, `X-Auth-Mode` headers; exposes `X-Refresh-Token`
+  - `MaxAge: 86400` (24h preflight cache)
+- Modified `backend/api/v1/auth_service_login.go`:
+  - Token mode: reads `X-Auth-Mode: token` header
+  - Returns access token in response body + refresh token via `X-Refresh-Token` header
+  - No protobuf changes needed — uses existing `Token` field + custom header
+- **No changes to auth.go** — dual auth already implemented in `GetTokenFromHeaders()`
+
+**Status: ✅ DONE**

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { SchemaDiagram } from "@/react/components/SchemaDiagram";
 import { useVueState } from "@/react/hooks/useVueState";
 import {

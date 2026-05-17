@@ -6,6 +6,8 @@
 | Priority | P1 |
 | Depends On | TASK-WEAK-008-1 |
 | Est. | S (~60 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-12 |
 
 ## Objective
 
@@ -15,27 +17,18 @@ Export per-pool Prometheus metrics every 5s from `sql.DBStats()`.
 
 | Action | Path |
 |--------|------|
-| MODIFY | `backend/store/pool_manager.go` — add `collectMetrics()` |
+| MODIFY | `backend/store/pool_manager.go` — add metrics registration |
+| EXISTS | `backend/store/pool_metrics.go` — existing metrics collector |
 
-## Specification
+## Implementation Notes
 
-Metrics (labeled by `pool=api|runner`):
-- `bytebase_db_pool_active_connections{pool}`
-- `bytebase_db_pool_idle_connections{pool}`
-- `bytebase_db_pool_waiting_requests{pool}`
-- `bytebase_db_pool_max_connections{pool}`
-
-```go
-func (pm *PoolManager) collectMetrics(ctx context.Context) {
-    ticker := time.NewTicker(5 * time.Second)
-    for { /* read Stats(), set gauges */ }
-}
-```
-
-Started automatically in `Initialize()`.
+- **Metrics Collection:** Reused the existing `PoolMetrics` implementation in `pool_metrics.go`.
+- **Wiring:** Added `StartMetricsCollector` to `PoolManager` which runs the background goroutine to poll `sql.DB.Stats()` every 5 seconds.
+- **Labels:** Metrics are exported with a `pool` label (e.g., `api` or `runner`).
+- **Additional Metrics:** Added a `reconnects_total` Prometheus counter to track how often the database connection pool is re-initialized (which supports TASK-008-3).
 
 ## Acceptance Criteria
 
-- [ ] 4 Prometheus gauges exported with `pool` label
-- [ ] Updated every 5 seconds
-- [ ] Goroutine stops on context cancellation
+- [x] 4 Prometheus gauges exported with `pool` label
+- [x] Updated every 5 seconds
+- [x] Goroutine stops on context cancellation

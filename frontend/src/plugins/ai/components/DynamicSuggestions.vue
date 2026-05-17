@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <div v-if="show" class="flex items-center overflow-hidden h-[22px]">
     <template v-if="dynamicSuggestions && !ready">

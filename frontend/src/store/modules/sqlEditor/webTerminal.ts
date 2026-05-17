@@ -107,7 +107,9 @@ const createStreamingQueryController = () => {
     if (status.value === "DISCONNECTED") {
       // Refresh the access-token cookie before opening a new WebSocket.
       // The cookie may have expired since the last connection closed.
-      await refreshTokens().catch(() => {});
+      await refreshTokens().catch((e) => {
+        console.warn("[WebTerminal] Failed to refresh tokens:", e);
+      });
       $ws.value = connect(request);
     }
   });

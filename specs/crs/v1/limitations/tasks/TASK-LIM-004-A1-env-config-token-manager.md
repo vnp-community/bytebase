@@ -53,8 +53,21 @@ export function getEnvConfig(): { apiUrl: string; authMode: 'token' | 'cookie' }
 
 ## Acceptance Criteria
 
-- [ ] `env-config.js` loaded before app (in index.html head)
-- [ ] Config fallback chain: runtime → build-time → default
-- [ ] Token stored in memory only (not localStorage for access token)
-- [ ] Auto-refresh before expiry
-- [ ] ConnectRPC transport injects Bearer header
+- [x] `env-config.js` loaded before app (in index.html head) → **DONE**: `<script src="/env-config.js">` added before `</head>`
+- [x] Config fallback chain: runtime → build-time → default → **DONE**: `getEnvConfig()` reads `window.__ENV__` → `import.meta.env.VITE_*` → hardcoded defaults
+- [x] Token stored in memory only (not localStorage for access token) → **DONE**: `let accessToken: string | null` in module scope
+- [x] Auto-refresh before expiry → **DONE**: `scheduleRefresh()` parses JWT `exp`, fires 1min before
+- [x] ConnectRPC transport injects Bearer header → **DONE**: `createAuthenticatedTransport()` with Bearer interceptor + `X-Auth-Mode: token`
+
+## Implementation Notes
+
+- Created `frontend/public/env-config.js` — deploy-time overridable runtime config
+- Created `frontend/src/config/env.ts` — 3-tier config reader with TypeScript types
+- Created `frontend/src/auth/token-manager.ts` — JWT lifecycle management
+  - `setTokens()` / `clearTokens()` / `getAccessToken()` / `isAuthenticated()`
+  - `createAuthenticatedTransport()` — ConnectRPC transport factory
+  - `refreshAccessToken()` — POST to `/v1/auth/refresh`
+  - Auto-schedule refresh via `setTimeout` based on JWT `exp` claim
+- Modified `frontend/index.html` — added env-config.js script tag
+
+**Status: ✅ DONE**

@@ -90,6 +90,7 @@ const workspaceRoutes: RouteRecordRaw[] = [
     meta: {
       title: () => t("common.databases"),
       requiredPermissionList: () => ["bb.databases.list"],
+      preserveQuery: ["project", "filter"],
     },
     components: {
       content: () => import("@/react/ReactPageMount.vue"),

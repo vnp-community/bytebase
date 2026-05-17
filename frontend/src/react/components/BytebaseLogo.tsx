@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useTranslation } from "react-i18next";
 import logoFull from "@/assets/logo-full.svg";
 import { useRecentVisit, useWorkspace } from "@/react/hooks/useAppState";

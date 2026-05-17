@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { debounce } from "lodash-es";
 import type { IDisposable } from "monaco-editor";
 import * as monaco from "monaco-editor";

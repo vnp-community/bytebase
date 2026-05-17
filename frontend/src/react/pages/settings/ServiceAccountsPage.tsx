@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { create } from "@bufbuild/protobuf";
 import { FieldMaskSchema } from "@bufbuild/protobuf/wkt";
 import { Copy, KeyRound, Plus, Trash2, Undo2 } from "lucide-react";

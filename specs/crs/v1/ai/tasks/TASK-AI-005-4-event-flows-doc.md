@@ -6,7 +6,8 @@
 | Priority | P2 |
 | Depends On | TASK-AI-005-2 |
 | Status | ✅ DONE |
-| Completed | 2025-05-09 |
+| Completed | 2026-05-09 |
+| Verified | 2026-05-11 |
 | Est. | S (documentation only) |
 
 ## Objective
@@ -15,7 +16,7 @@ Create `EVENT_FLOWS.md` documenting the DCM workflow pipeline, channel buffer si
 
 ## Delivered
 
-**File**: `backend/component/bus/EVENT_FLOWS.md`
+**File**: `backend/component/bus/EVENT_FLOWS.md` (159 lines)
 
 ### Contents
 
@@ -25,6 +26,10 @@ Create `EVENT_FLOWS.md` documenting the DCM workflow pipeline, channel buffer si
 4. **4 Detailed Event Flows** — Plan creation, Manual rollout, Task skip, Task cancellation
 5. **Concurrent Access Patterns** — `sync.Map` usage for cancel functions
 6. **PG NOTIFY / Durable Bus Integration** — Publisher/Consumer separation, `FOR UPDATE SKIP LOCKED`, HA safety
+
+### Verification (2026-05-11 re-verified)
+
+Manual review — documentation only. Content matches actual bus.go implementation.
 
 ## Acceptance Criteria
 

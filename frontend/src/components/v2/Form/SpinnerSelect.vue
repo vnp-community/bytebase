@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <NSelect v-bind="$attrs" :loading="loading" @update:value="handleUpdate" />
 </template>

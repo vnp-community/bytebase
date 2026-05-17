@@ -227,7 +227,30 @@ func (s *AuthService) finalizeLogin(ctx context.Context, req *connect.Request[v1
 	}
 	resp := connect.NewResponse(response)
 
-	if req.Msg.Web {
+	// Token mode: When the X-Auth-Mode header is "token", return tokens in the
+	// response body instead of cookies. This supports standalone frontend
+	// deployments where the frontend is served from a different origin.
+	authMode := req.Header().Get("X-Auth-Mode")
+	if authMode == "token" {
+		response.Token = token
+
+		// Also generate a refresh token for the body.
+		refreshToken, err := auth.GenerateOpaqueToken()
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, errors.Wrap(err, "failed to generate refresh token"))
+		}
+		refreshTokenDuration := auth.GetRefreshTokenDuration(ctx, s.store, s.licenseService, workspaceID)
+		if err := s.store.CreateWebRefreshToken(ctx, &store.WebRefreshTokenMessage{
+			TokenHash: auth.HashToken(refreshToken),
+			UserEmail: user.Email,
+			ExpiresAt: time.Now().Add(refreshTokenDuration),
+		}); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, errors.Wrap(err, "failed to create refresh token"))
+		}
+		// RefreshToken is not in the LoginResponse protobuf, so we send it
+		// as a response header that the frontend token-manager reads.
+		resp.Header().Set("X-Refresh-Token", refreshToken)
+	} else if req.Msg.Web {
 		if user.Type != storepb.PrincipalType_END_USER {
 			return nil, connect.NewError(connect.CodePermissionDenied, errors.Errorf("only users can use web login"))
 		}

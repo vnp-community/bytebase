@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { ChevronLeft, Plus } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,

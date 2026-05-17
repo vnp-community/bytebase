@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useRef } from "react";
 import type { MoveHandler, NodeApi, TreeApi } from "react-arborist";

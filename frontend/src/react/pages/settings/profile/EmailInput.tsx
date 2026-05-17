@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Input } from "@/react/components/ui/input";

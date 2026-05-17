@@ -1,12 +1,14 @@
+import type { ReactCoreDeps, ReactRoot } from "./bridge-types";
+
 // Use import.meta.glob so vue-tsc does not follow the import into React .tsx files.
 const sidebarLoader = import.meta.glob("./components/ProjectSidebar.tsx");
 
-// biome-ignore lint/suspicious/noExplicitAny: React types conflict with Vue JSX in vue-tsc
-type ReactDeps = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+type SidebarComponent = (props: Record<string, unknown>) => React.ReactNode;
 
-let cachedDeps: ReactDeps | null = null;
+let cachedDeps: ReactCoreDeps | null = null;
+let cachedSidebar: SidebarComponent | null = null;
 
-async function loadCoreDeps() {
+async function loadCoreDeps(): Promise<ReactCoreDeps> {
   if (cachedDeps) return cachedDeps;
   const [
     { createElement, StrictMode },
@@ -26,35 +28,42 @@ async function loadCoreDeps() {
     createRoot,
     I18nextProvider,
     i18n: i18nModule.default,
-  };
+  } as unknown as ReactCoreDeps;
   return cachedDeps;
 }
 
-async function loadSidebar() {
+async function loadSidebar(): Promise<SidebarComponent> {
+  if (cachedSidebar) return cachedSidebar;
   const loader = sidebarLoader["./components/ProjectSidebar.tsx"];
   if (!loader) throw new Error("ProjectSidebar not found");
   const mod = (await loader()) as Record<string, unknown>;
-  return mod.ProjectSidebar as ReactDeps;
+  cachedSidebar = mod.ProjectSidebar as SidebarComponent;
+  return cachedSidebar;
 }
 
 export async function mountProjectSidebar(
   container: HTMLElement,
-  locale: string
-) {
+  locale: string,
+  signal?: AbortSignal
+): Promise<ReactRoot> {
   const [deps, ProjectSidebar] = await Promise.all([
     loadCoreDeps(),
     loadSidebar(),
   ]);
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
   if (deps.i18n.language !== locale) {
     await deps.i18n.changeLanguage(locale);
   }
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
   const tree = deps.createElement(
     deps.StrictMode,
     null,
     deps.createElement(
-      deps.I18nextProvider,
+      deps.I18nextProvider as Parameters<typeof deps.createElement>[0],
       { i18n: deps.i18n },
-      deps.createElement(ProjectSidebar)
+      deps.createElement(ProjectSidebar as Parameters<typeof deps.createElement>[0])
     )
   );
   const root = deps.createRoot(container);
@@ -63,10 +72,9 @@ export async function mountProjectSidebar(
 }
 
 export async function updateProjectSidebarLocale(
-  // biome-ignore lint/suspicious/noExplicitAny: React Root type from dynamic import
-  root: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  root: ReactRoot,
   locale: string
-) {
+): Promise<void> {
   const [deps, ProjectSidebar] = await Promise.all([
     loadCoreDeps(),
     loadSidebar(),
@@ -78,9 +86,9 @@ export async function updateProjectSidebarLocale(
     deps.StrictMode,
     null,
     deps.createElement(
-      deps.I18nextProvider,
+      deps.I18nextProvider as Parameters<typeof deps.createElement>[0],
       { i18n: deps.i18n },
-      deps.createElement(ProjectSidebar)
+      deps.createElement(ProjectSidebar as Parameters<typeof deps.createElement>[0])
     )
   );
   root.render(tree);

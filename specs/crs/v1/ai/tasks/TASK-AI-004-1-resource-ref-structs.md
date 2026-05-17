@@ -5,49 +5,50 @@
 | Solution | SOL-AI-004 |
 | Priority | P1 |
 | Depends On | — |
+| Status | ✅ DONE |
+| Completed | 2026-05-09 |
+| Verified | 2026-05-10 |
 | Est. | S (~120 LoC) |
-| **Status** | **✅ DONE** (2026-05-09) |
 
 ## Objective
 
 Define typed struct definitions for all AIP resource name patterns used by Bytebase.
 
-## Files
+## Delivered
 
-| Action | Path |
-|--------|------|
-| CREATE | `backend/common/resource_ref.go` |
+**File**: `backend/common/resource_ref.go` (241 lines)
 
-## Specification
+12 typed structs with godoc and AIP patterns:
 
-Define 12 structs modeling the resource hierarchy:
+| Struct | Fields |
+|--------|--------|
+| `ProjectRef` | ProjectID |
+| `PlanRef` | ProjectID, PlanUID |
+| `IssueRef` | ProjectID, IssueUID |
+| `ReleaseRef` | ProjectID, ReleaseUID |
+| `RolloutRef` | ProjectID, RolloutUID |
+| `StageRef` | ProjectID, RolloutUID, StageID |
+| `TaskRef` | ProjectID, RolloutUID, StageID, TaskUID |
+| `TaskRunRef` | ProjectID, RolloutUID, StageID, TaskUID, TaskRunUID |
+| `InstanceRef` | InstanceID |
+| `DatabaseRef` | InstanceID, DatabaseName |
+| `SettingRef` | SettingName |
+| `UserRef` | UserUID |
 
-```go
-type ProjectRef struct { ProjectID string }
-type PlanRef struct { ProjectID string; PlanUID int64 }
-type IssueRef struct { ProjectID string; IssueUID int64 }
-type ReleaseRef struct { ProjectID string; ReleaseUID int64 }
-type RolloutRef struct { ProjectID string; RolloutUID int64 }
-type StageRef struct { ProjectID string; RolloutUID int64; StageID string }
-type TaskRef struct { ProjectID string; RolloutUID int64; StageID string; TaskUID int64 }
-type TaskRunRef struct { ProjectID string; RolloutUID int64; StageID string; TaskUID int64; TaskRunUID int64 }
-type InstanceRef struct { InstanceID string }
-type DatabaseRef struct { InstanceID string; DatabaseName string }
-type SettingRef struct { SettingName string }
-type UserRef struct { UserUID string }
-```
+Also includes 8 `Parse*Ref()` functions and 12 `String()` methods (co-located in same file).
 
-Each struct with godoc including the AIP pattern (e.g., `"projects/{project}/plans/{planUID}"`).
-
-### Verification
+### Verification (2026-05-10 re-verified)
 
 ```bash
-go build ./backend/common/...
+go build ./backend/common/...   # ✅ PASS
+go vet ./backend/common/...     # ✅ PASS
+go test ./backend/common/... -run 'TestParse|TestResource' -count=1  # ✅ PASS
 ```
 
 ## Acceptance Criteria
 
-- [ ] 12 ref structs defined
-- [ ] Each has godoc with AIP pattern
-- [ ] `go build` passes
-- [ ] No callers — additive only
+- [x] 12 ref structs defined
+- [x] Each has godoc with AIP pattern
+- [x] 8 parse functions + 12 String() methods
+- [x] `go build` passes
+- [x] No callers — additive only

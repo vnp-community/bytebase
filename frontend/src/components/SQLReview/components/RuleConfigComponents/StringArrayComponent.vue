@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <div>
     <div v-if="!disabled" class="textinfolabel mb-1">

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { create } from "@bufbuild/protobuf";
 import { useEffect, useRef, useState } from "react";
 import { EllipsisText } from "@/react/components/ui/ellipsis-text";

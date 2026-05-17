@@ -9,6 +9,10 @@
     <meta http-equiv="Expires" content="0" />
     <title>Bytebase</title>
     <meta name="color-scheme" content="light only" />
+    <!-- CSP nonce placeholder — replaced per-request by backend (TASK-WEAK-001-3) -->
+    <meta name="csp-nonce" content="CSP_NONCE_PLACEHOLDER" />
+    <!-- Runtime environment config — overridable at deploy-time for standalone frontend -->
+    <script src="/env-config.js"></script>
   </head>
 
   <body class="text-base bg-white!">

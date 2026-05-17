@@ -86,3 +86,4 @@ func TestNoopCache_AlwaysMisses(t *testing.T) {
 // Compile-time checks.
 var _ Cache[string, int] = (*LRUCache[string, int])(nil)
 var _ Cache[string, int] = (*NoopCache[string, int])(nil)
+var _ Cache[string, int] = (*RedisCache[string, int])(nil)

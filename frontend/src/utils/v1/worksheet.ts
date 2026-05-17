@@ -95,8 +95,8 @@ export const extractWorksheetConnection = async (worksheet: {
       const { instance } = extractDatabaseResourceName(database.name);
       connection.instance = instance;
       connection.database = database.name;
-    } catch {
-      // Skip.
+    } catch (e) {
+      console.warn("[extractWorksheetConnection] Failed to fetch database:", worksheet.database, e);
     }
   }
   return connection;

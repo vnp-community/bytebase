@@ -27,6 +27,7 @@ import (
 	"github.com/bytebase/bytebase/backend/component/config"
 	"github.com/bytebase/bytebase/backend/component/dbfactory"
 	"github.com/bytebase/bytebase/backend/component/iam"
+	"github.com/bytebase/bytebase/backend/component/ratelimit"
 	"github.com/bytebase/bytebase/backend/component/sampleinstance"
 	"github.com/bytebase/bytebase/backend/component/sheet"
 	"github.com/bytebase/bytebase/backend/component/webhook"
@@ -37,6 +38,19 @@ import (
 	"github.com/bytebase/bytebase/backend/store"
 )
 
+// Compile-time interface satisfaction checks.
+// These verify that *store.Store can be passed where domain interfaces are expected,
+// enabling incremental DI migration from concrete types to interfaces.
+var (
+	_ store.DataStore       = (*store.Store)(nil)
+	_ store.UserStore       = (*store.Store)(nil)
+	_ store.SettingReader   = (*store.Store)(nil)
+	_ store.WorkspaceReader = (*store.Store)(nil)
+	_ store.AuthStore       = (*store.Store)(nil)
+	_ store.AccountReader   = (*store.Store)(nil)
+	_ store.PolicyReader    = (*store.Store)(nil)
+)
+
 func configureGrpcRouters(
 	ctx context.Context,
 	e *echo.Echo,
@@ -45,7 +59,7 @@ func configureGrpcRouters(
 	dbFactory *dbfactory.DBFactory,
 	licenseService *enterprise.LicenseService,
 	profile *config.Profile,
-	bus *bus.Bus,
+	bus bus.EventBus,
 	schemaSyncer *schemasync.Syncer,
 	webhookManager *webhook.Manager,
 	iamManager *iam.Manager,
@@ -129,12 +143,19 @@ func configureGrpcRouters(
 	// Create validation interceptor.
 	validateInterceptor := validate.NewInterceptor()
 
+	// T-024: Create per-workspace rate limiter.
+	rateLimiter := apiv1.NewRateLimitInterceptor(
+		ratelimit.New(ratelimit.DefaultConfig),
+	)
+
 	handlerOpts := connect.WithHandlerOptions(
 		connect.WithInterceptors(
 			validateInterceptor,
 			auth.New(stores, secret, licenseService, bus, profile),
+			rateLimiter,
 			apiv1.NewACLInterceptor(stores, secret, iamManager, profile),
 			apiv1.NewAuditInterceptor(stores, secret, profile),
+			apiv1.NewStandbyInterceptor(profile),
 		),
 		connect.WithRecover(onPanic),
 	)

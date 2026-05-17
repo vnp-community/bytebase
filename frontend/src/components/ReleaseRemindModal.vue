@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <BBModal :title="$t('remind.release.new-version-available')" @close="onClose">
     <div class="w-xl max-w-[calc(100vw-4rem)]">

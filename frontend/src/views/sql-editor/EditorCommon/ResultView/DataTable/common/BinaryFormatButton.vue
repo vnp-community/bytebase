@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <!-- Button to change binary data format for an entire column -->
 <template>
   <div>

@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <div class="border border-gray-300 rounded-sm">
     <div class="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-sm">

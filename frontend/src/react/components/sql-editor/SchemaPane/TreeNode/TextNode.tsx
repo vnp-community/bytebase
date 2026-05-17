@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Folder } from "lucide-react";
 import type { TreeNode } from "../schemaTree";
 import { CommonNode } from "./CommonNode";

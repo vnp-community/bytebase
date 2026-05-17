@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <NTag v-if="accountType === AccountType.SERVICE_ACCOUNT || accountType === AccountType.WORKLOAD_IDENTITY" v-bind="$attrs" round type="info">
     {{ accountType === AccountType.SERVICE_ACCOUNT

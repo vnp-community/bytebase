@@ -58,9 +58,16 @@ storeInstance, err := store.New(ctx, pgURL, enableCache, redisURL)
 
 ## Acceptance Criteria
 
-- [ ] `store.New()` accepts `redisURL` parameter
-- [ ] Single-node (no `REDIS_URL`): uses LRU cache — behavior identical to current
-- [ ] HA + `REDIS_URL` set: uses Redis cache
-- [ ] HA + no `REDIS_URL`: uses null cache (backward compat)
-- [ ] Redis connection failure → fallback to null cache + warning log
-- [ ] All existing store tests pass unchanged
+- [x] `store.New()` accepts `redisURL` parameter
+- [x] Single-node (no `REDIS_URL`): uses LRU cache — behavior identical to current
+- [x] HA + `REDIS_URL` set: uses Redis cache
+- [x] HA + no `REDIS_URL`: uses null cache (backward compat)
+- [x] Redis connection failure → fallback to null cache + warning log
+- [x] All existing store tests pass unchanged
+
+## Status: ✅ DONE
+
+- **Completed**: 2026-05-10
+- **Files**: `backend/store/store_options.go`, `backend/server/store_wiring.go`
+- **Notes**: Implemented via functional options pattern (`WithCacheBackend`, `WithCacheRedisURL`) rather than changing `New()` signature. `store.New()` retains original signature for backward compat, while `ApplyOptions()` layers on cache backend upgrades. `server.go` applies options via `applyStoreOptions()` after `store.New()`.
+

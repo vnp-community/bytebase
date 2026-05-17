@@ -114,6 +114,9 @@ func GetIssueOrders(orderBy string) ([]*OrderByKey, error) {
 
 // GetIssue gets issue by issue UID.
 func (s *Store) GetIssue(ctx context.Context, find *FindIssueMessage) (*IssueMessage, error) {
+	if err := validateCompositePKQuery("issue", getFirstProjectID(find.ProjectIDs), find.UID); err != nil {
+		return nil, err
+	}
 	issues, err := s.ListIssues(ctx, find)
 	if err != nil {
 		return nil, err
@@ -287,7 +290,9 @@ func (s *Store) ListIssues(ctx context.Context, find *FindIssueMessage) ([]*Issu
 		for _, t := range *v {
 			typeStrings = append(typeStrings, t.String())
 		}
-		where.And("issue.type = ANY(?)", typeStrings)
+		// Use generated column issue_type for O(1) B-tree lookups
+		// instead of filtering on the type column directly.
+		where.And("issue.issue_type = ANY(?)", typeStrings)
 	}
 	if v := find.Query; v != nil && *v != "" {
 		searchCondition := qb.Q()
@@ -508,4 +513,12 @@ func getTSQuery(text string) string {
 		_, _ = fmt.Fprintf(&tsQuery, "%s:*", part)
 	}
 	return tsQuery.String()
+}
+
+// getFirstProjectID returns the first element of a string slice or empty string.
+func getFirstProjectID(ids []string) string {
+	if len(ids) > 0 {
+		return ids[0]
+	}
+	return ""
 }

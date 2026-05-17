@@ -6,6 +6,9 @@
 | Priority | P1 |
 | Depends On | — |
 | Est. | M (~100 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-12 |
+| Notes | Proto `TaskRunResult.warnings` field added (field 10). All 4 migration methods updated to accumulate warnings. `bytebase_schema_sync_errors_total` and `bytebase_changelog_update_errors_total` counters added. |
 
 ## Objective
 

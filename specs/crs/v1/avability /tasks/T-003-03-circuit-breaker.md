@@ -39,8 +39,8 @@ Key states:
 
 ## Acceptance Criteria
 
-- [ ] State machine: Closed → Open → HalfOpen → Closed
-- [ ] Thread-safe (`sync.RWMutex`)
-- [ ] 3 Prometheus metrics: `state` (gauge), `failures_total` (counter), `rejected_total` (counter)
-- [ ] `ErrCircuitOpen` sentinel error
-- [ ] `go build ./backend/component/circuitbreaker/...` passes
+- [x] State machine: Closed → Open → HalfOpen → Closed
+- [x] Thread-safe (`sync.RWMutex`)
+- [x] 3 Prometheus metrics: `state` (gauge), `failures_total` (counter), `rejected_total` (counter)
+- [x] `ErrCircuitOpen` sentinel error
+- [x] `go build ./backend/component/circuitbreaker/...` passes

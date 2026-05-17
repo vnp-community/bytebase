@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";

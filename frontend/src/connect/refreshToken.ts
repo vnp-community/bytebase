@@ -2,74 +2,68 @@ import { authServiceClientConnect } from "@/connect";
 
 const LOCK_NAME = "bb_token_refresh";
 const CHANNEL_NAME = "bb_token_refresh";
-const WAIT_TIMEOUT_MS = 10000;
+const LOCK_TIMEOUT_MS = 30_000;
+const BROADCAST_WAIT_MS = 10_000;
+const MAX_RETRIES = 2;
+
+type RefreshMessage = "complete" | "failed";
 
 let localPromise: Promise<void> | null = null;
+let refreshMutex = Promise.resolve();
 
-/**
- * Refresh the access token using the refresh token cookie.
- * Uses Web Lock API for cross-tab coordination.
- * Only one tab performs the refresh; others wait for completion.
- */
 export async function refreshTokens(): Promise<void> {
-  // Same-tab deduplication
-  if (localPromise) {
-    return localPromise;
+  if (typeof navigator.locks?.request !== "function") {
+    console.warn("[TokenRefresh] Web Locks unavailable, using fallback");
+    refreshMutex = refreshMutex.then(() => authServiceClientConnect.refresh({}));
+    await refreshMutex;
+    return;
   }
-
-  localPromise = doRefresh().finally(() => {
-    localPromise = null;
-  });
-
+  if (localPromise) return localPromise;
+  localPromise = doRefreshWithRetry().finally(() => { localPromise = null; });
   return localPromise;
 }
 
-async function doRefresh(): Promise<void> {
-  if (await tryAcquireAndRefresh()) {
-    return;
-  }
-
-  // Another tab is refreshing - wait for broadcast
-  const receivedBroadcast = await waitForBroadcast();
-
-  // Only retry if timed out (missed broadcast or other tab failed)
-  if (!receivedBroadcast) {
-    await tryAcquireAndRefresh();
+async function doRefreshWithRetry(attempt = 0): Promise<void> {
+  // CRITICAL: Create BroadcastChannel BEFORE lock attempt
+  const channel = new BroadcastChannel(CHANNEL_NAME);
+  try {
+    const acquired = await tryAcquireWithTimeout();
+    if (acquired) { channel.close(); return; }
+    const received = await waitForMessage(channel, BROADCAST_WAIT_MS);
+    if (received) return;
+    if (attempt < MAX_RETRIES) return doRefreshWithRetry(attempt + 1);
+    throw new Error("Token refresh failed after retries");
+  } finally {
+    try { channel.close(); } catch {}
   }
 }
 
-async function tryAcquireAndRefresh(): Promise<boolean> {
-  return navigator.locks.request(
-    LOCK_NAME,
-    { ifAvailable: true },
-    async (lock) => {
-      if (!lock) {
+async function tryAcquireWithTimeout(): Promise<boolean> {
+  return Promise.race([
+    navigator.locks.request(LOCK_NAME, { ifAvailable: true }, async (lock) => {
+      if (!lock) return false;
+      const bc = new BroadcastChannel(CHANNEL_NAME);
+      try {
+        await authServiceClientConnect.refresh({});
+        bc.postMessage("complete" satisfies RefreshMessage);
+        return true;
+      } catch (error) {
+        console.error("[TokenRefresh] Refresh failed:", error);
+        bc.postMessage("failed" satisfies RefreshMessage);
         return false;
+      } finally {
+        bc.close();
       }
-      await authServiceClientConnect.refresh({});
-      // Only broadcast on success - failure lets waiting tabs timeout and retry
-      const channel = new BroadcastChannel(CHANNEL_NAME);
-      channel.postMessage("complete");
-      channel.close();
-      return true;
-    }
-  );
+    }),
+    new Promise<boolean>((_, reject) =>
+      setTimeout(() => reject(new Error("Lock timeout")), LOCK_TIMEOUT_MS)
+    ),
+  ]);
 }
 
-function waitForBroadcast(): Promise<boolean> {
+function waitForMessage(channel: BroadcastChannel, timeoutMs: number): Promise<boolean> {
   return new Promise((resolve) => {
-    const channel = new BroadcastChannel(CHANNEL_NAME);
-
-    const cleanup = (received: boolean) => {
-      channel.close();
-      resolve(received);
-    };
-
-    const timeout = setTimeout(() => cleanup(false), WAIT_TIMEOUT_MS);
-
-    channel.onmessage = () => {
-      clearTimeout(timeout);
-      cleanup(true);
-    };
+    const timer = setTimeout(() => resolve(false), timeoutMs);
+    channel.onmessage = (event) => { clearTimeout(timer); resolve(event.data === "complete"); };
   });
 }

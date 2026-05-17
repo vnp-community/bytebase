@@ -57,8 +57,8 @@ function migrateLanguage() {
       if (lang) {
         localStorage.setItem(STORAGE_KEY_LANGUAGE, lang);
       }
-    } catch {
-      // ignore malformed
+    } catch (e) {
+      console.warn("[migrateLanguage] Failed to migrate language:", e);
     }
   }
   localStorage.removeItem("bytebase_options");

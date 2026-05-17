@@ -7,6 +7,7 @@
 | Depends On | — |
 | Status | ✅ DONE |
 | Completed | 2025-05-09 |
+| Verified | 2025-05-10 |
 | Est. | M (move ~1800 LoC across files) |
 
 ## Objective
@@ -25,11 +26,12 @@ Split `sql_service.go` (1877 lines) into 7 domain files. Zero functional change 
 | CREATE | `backend/api/v1/sql_service_history.go` — SearchQueryHistories, createQueryHistory, Build*MetadataFunc, DiffMetadata, resolveDataSourceID, checkAndGetDataSourceQueriable | 343 |
 | EXISTS | `backend/api/v1/sql_service_ai.go` — AI-related query functions (pre-existing) | 380 |
 
-### Verification
+### Verification (2025-05-10 re-verified)
 
 ```bash
 go build ./backend/api/v1/  # ✅ PASS
 go vet ./backend/api/v1/    # ✅ PASS (exit 0)
+# Total: 2312 lines across 7 files
 ```
 
 ## Acceptance Criteria

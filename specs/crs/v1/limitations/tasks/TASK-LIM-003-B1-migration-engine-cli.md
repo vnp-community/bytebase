@@ -45,9 +45,21 @@ bytebase migrate-db --target-url <PG_URL> [--dry-run] [--backup-dir <dir>]
 
 ## Acceptance Criteria
 
-- [ ] Dry-run validates target PG connection and emptiness
-- [ ] Full migration: dump → restore → verify row counts
-- [ ] Progress reported with percentages
-- [ ] Backup created before migration
-- [ ] Non-empty target DB rejected with clear error
-- [ ] Non-embedded PG rejected with clear message
+- [x] Dry-run validates target PG connection and emptiness → **DONE**: `validateTarget()` checks PG version ≥14 and no user tables
+- [x] Full migration: dump → restore → verify row counts → **DONE**: 6-step pipeline via `Engine.Run()`
+- [x] Progress reported with percentages → **DONE**: `chan MigrationProgress` with Phase/Percent/Message
+- [x] Backup created before migration → **DONE**: `createBackup()` runs `pg_dump --format custom --compress 6`
+- [x] Non-empty target DB rejected with clear error → **DONE**: `information_schema.tables` count check
+- [x] Non-embedded PG rejected with clear message → **DONE**: CLI checks `profile.UseEmbedDB()` before proceeding
+
+## Implementation Notes
+
+- Created `backend/component/dbmigrate/engine.go` (~310 LoC)
+  - 6-step pipeline: validateTarget → createBackup → dumpEmbedded → restoreToTarget → verifyIntegrity → report
+  - Verifies 11 key tables (principal, member, instance, db, issue, pipeline, stage, task, changelog, setting, project)
+  - pg_restore exit code 1 (warnings) is tolerated for `--clean --if-exists`
+- Created `backend/bin/server/cmd/migrate_db.go` (~110 LoC)
+  - Cobra subcommand: `bytebase migrate-db --target-url <URL> [--dry-run] [--backup-dir <dir>]`
+  - Real-time progress printing + final summary with PG_URL instruction
+
+**Status: ✅ DONE**

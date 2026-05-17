@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { ShieldAlert } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useEnvironment, usePlanFeature } from "@/react/hooks/useAppState";

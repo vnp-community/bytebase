@@ -103,6 +103,7 @@ CREATE TABLE policy (
 
 CREATE INDEX idx_policy_workspace ON policy(workspace);
 CREATE UNIQUE INDEX idx_policy_unique_workspace_resource ON policy(workspace, resource_type, resource, type);
+CREATE INDEX IF NOT EXISTS idx_policy_payload_gin ON policy USING GIN (payload jsonb_path_ops);
 
 -- idp stores generic identity provider.
 CREATE TABLE idp (
@@ -254,6 +255,8 @@ CREATE TABLE plan (
 CREATE INDEX idx_plan_project ON plan(project);
 CREATE INDEX idx_plan_creator ON plan(creator);
 CREATE INDEX idx_plan_config_has_rollout ON plan ((config->>'hasRollout'));
+ALTER TABLE plan ADD CONSTRAINT plan_id_unique UNIQUE (id);
+CREATE INDEX IF NOT EXISTS idx_plan_config_gin ON plan USING GIN (config jsonb_path_ops);
 
 CREATE TABLE plan_check_run (
     -- unique and auto-increase per project
@@ -271,6 +274,7 @@ CREATE TABLE plan_check_run (
 
 CREATE UNIQUE INDEX idx_plan_check_run_unique_plan_id ON plan_check_run(project, plan_id);
 CREATE INDEX idx_plan_check_run_active_status ON plan_check_run(status, id) WHERE status IN ('AVAILABLE', 'RUNNING');
+ALTER TABLE plan_check_run ADD CONSTRAINT plan_check_run_id_unique UNIQUE (id);
 
 -- Tracks webhook delivery for pipeline events (PIPELINE_FAILED or PIPELINE_COMPLETED).
 -- One row per plan at any time - mutually exclusive events.
@@ -303,6 +307,8 @@ CREATE TABLE issue (
     -- Stored as Issue (proto/store/store/issue.proto)
     payload jsonb NOT NULL DEFAULT '{}',
     ts_vector tsvector,
+    -- Generated column: extracts payload->>'type' for O(1) B-tree filtering
+    issue_type TEXT GENERATED ALWAYS AS (payload->>'type') STORED,
     PRIMARY KEY (project, id),
     FOREIGN KEY (project, plan_id) REFERENCES plan(project, id)
 );
@@ -311,6 +317,9 @@ CREATE INDEX idx_issue_project ON issue(project);
 CREATE UNIQUE INDEX idx_issue_unique_plan_id ON issue(project, plan_id);
 CREATE INDEX idx_issue_creator ON issue(creator);
 CREATE INDEX idx_issue_ts_vector ON issue USING GIN(ts_vector);
+ALTER TABLE issue ADD CONSTRAINT issue_id_unique UNIQUE (id);
+CREATE INDEX IF NOT EXISTS idx_issue_payload_gin ON issue USING GIN (payload jsonb_path_ops);
+CREATE INDEX IF NOT EXISTS idx_issue_type ON issue (issue_type) WHERE issue_type IS NOT NULL;
 
 CREATE TABLE issue_comment (
     -- global unique
@@ -546,6 +555,8 @@ CREATE TABLE task (
 );
 
 CREATE INDEX idx_task_plan_id_environment ON task(project, plan_id, environment);
+ALTER TABLE task ADD CONSTRAINT task_id_unique UNIQUE (id);
+CREATE INDEX IF NOT EXISTS idx_task_payload_gin ON task USING GIN (payload jsonb_path_ops);
 
 -- task run table stores the task run
 CREATE TABLE task_run (
@@ -577,6 +588,7 @@ CREATE UNIQUE INDEX uk_task_run_task_id_attempt ON task_run(project, task_id, at
 -- index is more efficient than a full index on status - smaller size, faster maintenance, better cache efficiency.
 CREATE INDEX idx_task_run_active_status_id ON task_run(status, id) WHERE status IN ('PENDING', 'AVAILABLE', 'RUNNING');
 CREATE INDEX idx_task_run_running_replica ON task_run(replica_id) WHERE status = 'RUNNING' AND replica_id IS NOT NULL;
+ALTER TABLE task_run ADD CONSTRAINT task_run_id_unique UNIQUE (id);
 
 -- replica_heartbeat tracks active replicas in HA deployments.
 -- Used to detect and clean up stale RUNNING task runs from crashed replicas.
@@ -653,6 +665,27 @@ CREATE TABLE email_verification_code (
 );
 
 CREATE INDEX idx_email_verification_code_expires_at ON email_verification_code (expires_at);
+
+CREATE TABLE backup_registry (
+    id              BIGSERIAL PRIMARY KEY,
+    backup_id       TEXT UNIQUE NOT NULL,
+    backup_type     TEXT NOT NULL,          -- FULL, INCREMENTAL, WAL
+    status          TEXT NOT NULL DEFAULT 'IN_PROGRESS',
+    size_bytes      BIGINT NOT NULL DEFAULT 0,
+    checksum_sha256 TEXT,
+    storage_path    TEXT NOT NULL,
+    storage_type    TEXT NOT NULL DEFAULT 'LOCAL',
+    encryption      TEXT NOT NULL DEFAULT 'NONE',
+    data_timestamp  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    verified_at     TIMESTAMPTZ,
+    verify_result   TEXT,
+    expires_at      TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days',
+    completed_at    TIMESTAMPTZ,
+    error_message   TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_backup_registry_status ON backup_registry (status);
+CREATE INDEX idx_backup_registry_data_time ON backup_registry (data_timestamp DESC);
 
 -----------------------
 -- Seed data

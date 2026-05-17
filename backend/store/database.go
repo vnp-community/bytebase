@@ -60,6 +60,16 @@ type BatchUpdateDatabases struct {
 	EnvironmentID *string
 }
 
+// DatabaseView controls the level of detail returned by ListDatabases.
+type DatabaseView int
+
+const (
+	// DatabaseViewFull returns all fields including metadata (default).
+	DatabaseViewFull DatabaseView = 0
+	// DatabaseViewBasic skips metadata deserialization for faster listing.
+	DatabaseViewBasic DatabaseView = 1
+)
+
 // FindDatabaseMessage is the message for finding databases.
 type FindDatabaseMessage struct {
 	// Workspace filters databases by the parent instance's workspace.
@@ -79,6 +89,11 @@ type FindDatabaseMessage struct {
 	Limit       *int
 	Offset      *int
 	OrderByKeys []*OrderByKey
+
+	// View controls the level of detail. DatabaseViewBasic skips metadata deserialization.
+	View DatabaseView
+	// AfterCursor enables cursor-based keyset pagination. Format: "project:instance:name".
+	AfterCursor *string
 }
 
 // removeDatabaseCache invalidates both workspace-scoped and unscoped cache entries for a database.
@@ -134,19 +149,14 @@ func (s *Store) ListDatabases(ctx context.Context, find *FindDatabaseMessage) ([
 		}
 	}
 
-	from.Space("LEFT JOIN instance ON db.instance = instance.resource_id")
-
 	if find.Workspace != "" {
-		where.And("instance.workspace = ?", find.Workspace)
+		where.And("db.workspace = ?", find.Workspace)
 	}
 	if v := find.ProjectID; v != nil {
 		where.And("db.project = ?", *v)
 	}
 	if v := find.EffectiveEnvironmentID; v != nil {
-		where.And(`COALESCE(
-			db.environment,
-			instance.environment
-		) = ?`, *v)
+		where.And("db.effective_environment = ?", *v)
 	}
 	if v := find.InstanceID; v != nil {
 		where.And("db.instance = ?", *v)
@@ -158,29 +168,35 @@ func (s *Store) ListDatabases(ctx context.Context, find *FindDatabaseMessage) ([
 		where.And("db.name = ANY(?)", find.DatabaseNames)
 	}
 	if v := find.Engine; v != nil {
-		where.And("instance.metadata->>'engine' = ?", v.String())
+		where.And("db.engine = ?", v.String())
 	}
 	if !find.ShowDeleted {
-		where.And("instance.deleted = ?", false)
 		where.And("db.deleted = ?", false)
 	}
 
-	q := qb.Q().Space(`
-		SELECT
-			db.project,
-			COALESCE(
-				db.environment,
-				instance.environment
-			),
-			db.environment,
-			db.instance,
-			db.name,
-			db.deleted,
-			db.metadata,
-			instance.metadata->>'engine'
-		FROM ?
-		WHERE ?
-	`, from, where)
+	// T-015: Cursor-based keyset pagination
+	if cursor := find.AfterCursor; cursor != nil {
+		parts := strings.SplitN(*cursor, ":", 3)
+		if len(parts) == 3 {
+			where.And(`(db.project, db.instance, db.name) > (?, ?, ?)`,
+				parts[0], parts[1], parts[2])
+		}
+	}
+
+	// T-014: View-based column selection
+	selectCols := qb.Q().Space(`
+		db.project,
+		db.effective_environment,
+		db.environment,
+		db.instance,
+		db.name,
+		db.deleted,
+		db.engine`)
+	if find.View != DatabaseViewBasic {
+		selectCols.Space(", db.metadata")
+	}
+
+	q := qb.Q().Space(`SELECT ? FROM ? WHERE ?`, selectCols, from, where)
 
 	if len(find.OrderByKeys) > 0 {
 		orderBy := []string{}
@@ -212,20 +228,43 @@ func (s *Store) ListDatabases(ctx context.Context, find *FindDatabaseMessage) ([
 	defer rows.Close()
 	for rows.Next() {
 		databaseMessage := &DatabaseMessage{}
-		var metadataString string
 		var effectiveEnvironment, environment, engine sql.NullString
-		if err := rows.Scan(
-			&databaseMessage.ProjectID,
-			&effectiveEnvironment,
-			&environment,
-			&databaseMessage.InstanceID,
-			&databaseMessage.DatabaseName,
-			&databaseMessage.Deleted,
-			&metadataString,
-			&engine,
-		); err != nil {
-			return nil, err
+
+		if find.View == DatabaseViewBasic {
+			// T-014: Skip metadata deserialization for BASIC view
+			if err := rows.Scan(
+				&databaseMessage.ProjectID,
+				&effectiveEnvironment,
+				&environment,
+				&databaseMessage.InstanceID,
+				&databaseMessage.DatabaseName,
+				&databaseMessage.Deleted,
+				&engine,
+			); err != nil {
+				return nil, err
+			}
+		} else {
+			var metadataString string
+			if err := rows.Scan(
+				&databaseMessage.ProjectID,
+				&effectiveEnvironment,
+				&environment,
+				&databaseMessage.InstanceID,
+				&databaseMessage.DatabaseName,
+				&databaseMessage.Deleted,
+				&engine,
+				&metadataString,
+			); err != nil {
+				return nil, err
+			}
+
+			var metadata storepb.DatabaseMetadata
+			if err := common.ProtojsonUnmarshaler.Unmarshal([]byte(metadataString), &metadata); err != nil {
+				return nil, err
+			}
+			databaseMessage.Metadata = &metadata
 		}
+
 		if effectiveEnvironment.Valid {
 			databaseMessage.EffectiveEnvironmentID = &effectiveEnvironment.String
 		}
@@ -237,12 +276,6 @@ func (s *Store) ListDatabases(ctx context.Context, find *FindDatabaseMessage) ([
 				databaseMessage.Engine = storepb.Engine(v)
 			}
 		}
-
-		var metadata storepb.DatabaseMetadata
-		if err := common.ProtojsonUnmarshaler.Unmarshal([]byte(metadataString), &metadata); err != nil {
-			return nil, err
-		}
-		databaseMessage.Metadata = &metadata
 
 		databases = append(databases, databaseMessage)
 	}
@@ -258,20 +291,29 @@ func (s *Store) ListDatabases(ctx context.Context, find *FindDatabaseMessage) ([
 
 // CreateDatabaseDefault creates a new database in the default project.
 func (s *Store) CreateDatabaseDefault(ctx context.Context, create *DatabaseMessage) (*DatabaseMessage, error) {
+	instance, err := s.GetInstanceByResourceID(ctx, create.InstanceID)
+	if err != nil || instance == nil {
+		return nil, errors.Errorf("instance %q not found", create.InstanceID)
+	}
+
 	q := qb.Q().Space(`
 		INSERT INTO db (
 			instance,
 			project,
 			name,
-			deleted
+			deleted,
+			workspace,
+			engine
 		)
-		VALUES (?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT (instance, name) DO UPDATE SET
 			deleted = EXCLUDED.deleted`,
 		create.InstanceID,
 		create.ProjectID,
 		create.DatabaseName,
 		false,
+		instance.Workspace,
+		instance.Metadata.GetEngine().String(),
 	)
 
 	query, args, err := q.ToSQL()
@@ -300,6 +342,11 @@ func (s *Store) UpsertDatabase(ctx context.Context, create *DatabaseMessage) (*D
 		environment = create.EnvironmentID
 	}
 
+	instance, err := s.GetInstanceByResourceID(ctx, create.InstanceID)
+	if err != nil || instance == nil {
+		return nil, errors.Errorf("instance %q not found", create.InstanceID)
+	}
+
 	q := qb.Q().Space(`
 		INSERT INTO db (
 			instance,
@@ -307,9 +354,11 @@ func (s *Store) UpsertDatabase(ctx context.Context, create *DatabaseMessage) (*D
 			environment,
 			name,
 			deleted,
-			metadata
+			metadata,
+			workspace,
+			engine
 		)
-		VALUES (?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (instance, name) DO UPDATE SET
 			project = EXCLUDED.project,
 			environment = EXCLUDED.environment,
@@ -321,6 +370,8 @@ func (s *Store) UpsertDatabase(ctx context.Context, create *DatabaseMessage) (*D
 		create.DatabaseName,
 		create.Deleted,
 		metadataString,
+		instance.Workspace,
+		instance.Metadata.GetEngine().String(),
 	)
 
 	query, args, err := q.ToSQL()

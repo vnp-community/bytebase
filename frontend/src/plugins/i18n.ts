@@ -3,6 +3,7 @@ import type { WritableComputedRef } from "vue";
 import { type Composer, createI18n } from "vue-i18n";
 import { STORAGE_KEY_LANGUAGE } from "@/utils/storage-keys";
 import { mergedLocalMessage } from "./i18n-messages";
+import { localeManager } from "@/localeManager";
 
 const validLocaleList = ["en-US", "zh-CN", "es-ES", "ja-JP", "vi-VN"];
 
@@ -86,6 +87,14 @@ const i18n = createI18n({
   datetimeFormats,
   fallbackLocale: "en-US",
 });
+
+localeManager.subscribe((newLocale) => {
+  i18n.global.locale.value = newLocale;
+});
+
+export function setLocale(newLocale: string) {
+  localeManager.setLocale(newLocale);
+}
 
 export const t = i18n.global.t as Composer["t"];
 

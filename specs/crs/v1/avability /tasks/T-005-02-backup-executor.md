@@ -32,8 +32,8 @@ func encryptFile(srcPath, dstPath, keyBase64 string) error
 
 ## Acceptance Criteria
 
-- [ ] Calls `pg_dump` with custom format + compression
-- [ ] SHA256 checksum for integrity
-- [ ] AES-256-GCM encryption when `BB_BACKUP_ENCRYPTION_KEY` set
-- [ ] Records result in backup_registry
-- [ ] `go build ./backend/runner/backup/...` passes
+- [x] Calls `pg_dump` with custom format + compression
+- [x] SHA256 checksum for integrity
+- [x] AES-256-GCM encryption when `BB_BACKUP_ENCRYPTION_KEY` set
+- [x] Records result in backup_registry
+- [x] `go build ./backend/runner/backup/...` passes

@@ -51,7 +51,21 @@ func ListAllCapabilities() map[storepb.Engine]DriverCapabilities
 
 ## Acceptance Criteria
 
-- [ ] Types defined: `DumpLevel`, `MaskingLevel`, `DriverCapabilities`
-- [ ] Registry functions: Register, Get, ListAll
-- [ ] Thread-safe registry (sync.RWMutex or sync.Map)
-- [ ] Get returns zero-value for unregistered engine (no panic)
+- [x] Types defined: `DumpLevel`, `MaskingLevel`, `DriverCapabilities` → **DONE**: 3 iota enums + 14-field struct
+- [x] Registry functions: Register, Get, ListAll → **DONE**: `RegisterCapabilities()`, `GetCapabilities()`, `ListAllCapabilities()`
+- [x] Thread-safe registry (sync.RWMutex or sync.Map) → **DONE**: `sync.RWMutex` guards `capsMap`
+- [x] Get returns zero-value for unregistered engine (no panic) → **DONE**: map lookup returns zero-value `DriverCapabilities{}`
+
+## Implementation Notes
+
+- Created `backend/plugin/db/capability.go`:
+  - `DumpLevel` enum: `DumpNone`, `DumpPartial`, `DumpFull`
+  - `MaskingLevel` enum: `MaskingNone`, `MaskingDocument`, `MaskingColumn`
+  - `DriverCapabilities` struct: 14 fields covering advisor, dump, backup, masking, sync, parser
+  - Thread-safe global registry with `sync.RWMutex`
+  - `RegisterCapabilities()` — panics on duplicate (like driver registration)
+  - `GetCapabilities()` — zero-value for unknown engines
+  - `ListAllCapabilities()` — returns a copy map
+  - `RegisteredCapabilityCount()` — helper for assertions
+
+**Status: ✅ DONE**

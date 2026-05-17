@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,8 @@ import (
 )
 
 // DBConnectionManager manages database connections with support for dynamic updates.
+//
+// DEPRECATED: Use pool_manager.go. This file will be removed in v7.0.
 type DBConnectionManager struct {
 	mu          sync.Mutex
 	db          *sql.DB
@@ -271,11 +274,23 @@ func createConnectionWithTracer(ctx context.Context, pgURL string) (*sql.DB, err
 		return nil, errors.Wrap(err, "failed to get superuser_reserved_connections")
 	}
 
-	maxOpenConns := maxConns - reservedConns
-	if maxOpenConns > 50 {
-		maxOpenConns = 50
-	}
+	availableConns := maxConns - reservedConns
+	maxOpenConns := getConfiguredPoolSize(availableConns)
+
 	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxOpenConns / 2)
+	db.SetConnMaxLifetime(30 * time.Minute)
+	db.SetConnMaxIdleTime(5 * time.Minute)
 
 	return db, nil
+}
+
+func getConfiguredPoolSize(availableConns int) int {
+	if v := os.Getenv("PG_MAX_POOL_SIZE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return min(n, availableConns)
+		}
+	}
+	target := availableConns * 80 / 100
+	return max(min(target, 200), 10)
 }

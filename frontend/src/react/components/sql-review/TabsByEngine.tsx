@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useEffect, useMemo, useState } from "react";
 import { EngineIcon } from "@/react/components/EngineIcon";
 import {

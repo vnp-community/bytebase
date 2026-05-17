@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { create } from "@bufbuild/protobuf";
 import { Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";

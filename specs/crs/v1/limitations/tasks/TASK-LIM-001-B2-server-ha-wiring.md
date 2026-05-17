@@ -49,7 +49,14 @@ func (s *Server) startLeaderRunner(ctx context.Context, r Runner, lockID int64, 
 
 ## Acceptance Criteria
 
-- [ ] Single-node mode: no behavior change (all runners start directly)
-- [ ] HA mode: 4 runners wrapped with LeaderRunner, 2 runners shared
-- [ ] Helper method `startLeaderRunner` encapsulates wiring
-- [ ] Existing tests pass unchanged
+- [x] Single-node mode: no behavior change (all runners start directly)
+- [x] HA mode: 4 runners wrapped with LeaderRunner, 2 runners shared
+- [x] Helper method `startLeaderRunner` encapsulates wiring
+- [x] Existing tests pass unchanged
+
+## Status: ✅ DONE
+
+- **Completed**: 2026-05-10
+- **Files**: `backend/server/server.go`
+- **Notes**: HA mode wraps 5 exclusive runners (TaskScheduler, SchemaSync, Approval, PlanCheck, DataCleaner) with `LeaderRunner`. Shared runners (heartbeat, notifyListener) run on all replicas. Additionally, `CacheInvalidator` is started as a shared runner in HA mode for cross-replica cache coherence. Single-node path is unchanged.
+

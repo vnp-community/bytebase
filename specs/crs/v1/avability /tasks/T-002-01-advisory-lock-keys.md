@@ -37,6 +37,6 @@ Thêm sau line 14:
 
 ## Acceptance Criteria
 
-- [ ] 3 new constants added (2001-2003)
-- [ ] Existing keys (1001-1003) unchanged
-- [ ] `go build ./backend/store/...` passes
+- [x] 3 new constants added (2001-2003)
+- [x] Existing keys (1001-1003) unchanged
+- [x] `go build ./backend/store/...` passes

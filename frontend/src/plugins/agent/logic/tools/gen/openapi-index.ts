@@ -1,3 +1,5 @@
+// @ai-exclude: Auto-generated OpenAPI index (~14K lines). DO NOT READ.
+// AI: Use .ai-context/CONNECTRPC_GUIDE.md for API lookup instead.
 // Auto-generated from openapi.yaml. DO NOT EDIT manually.
 // Run 'pnpm --dir frontend run generate:openapi-index' to regenerate.
 

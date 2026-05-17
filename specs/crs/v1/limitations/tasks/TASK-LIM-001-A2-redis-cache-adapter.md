@@ -55,8 +55,15 @@ func NewRedisCache[K comparable, V any](
 
 ## Acceptance Criteria
 
-- [ ] Implements all 5 `Cache[K,V]` methods
-- [ ] Graceful degradation: Redis errors → cache miss (not application error)
-- [ ] SCAN-based Purge (no KEYS blocking)
-- [ ] Unit tests with redis mock or testcontainers
-- [ ] `go.mod` updated with go-redis dependency
+- [x] Implements all 5 `Cache[K,V]` methods
+- [x] Graceful degradation: Redis errors → cache miss (not application error)
+- [x] SCAN-based Purge (no KEYS blocking)
+- [x] Unit tests with redis mock or testcontainers
+- [x] `go.mod` updated with go-redis dependency
+
+## Status: ✅ DONE
+
+- **Completed**: 2026-05-10
+- **Files**: `backend/store/cache/redis.go`, `backend/store/cache/cache_test.go`
+- **Notes**: `go-redis/v9` already in `go.mod`. RedisCache uses `Codec[V]` for serialization. Compile-time interface check added to test file. SCAN-based `Purge()` with cursor iteration for non-blocking key removal.
+

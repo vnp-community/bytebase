@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Unlink } from "lucide-react";
 import { EngineIcon, getEngineIconSrc } from "@/react/components/EngineIcon";
 import type { SQLEditorTab } from "@/types";

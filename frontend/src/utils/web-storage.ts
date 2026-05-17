@@ -20,6 +20,7 @@ import {
   toValue,
   watch,
 } from "vue";
+import { storageService } from "./storage-service";
 
 export class WebStorageHelper {
   storage: Storage;
@@ -31,21 +32,25 @@ export class WebStorageHelper {
   }
 
   save<T>(key: string, value: T) {
-    const fullKey = `${this.keyPrefix}.${key}`;
     try {
-      const json = JSON.stringify(value);
-      localStorage.setItem(fullKey, json);
-    } catch {
-      // nothing
+      storageService.saveSync(key, value, { namespace: this.keyPrefix });
+    } catch (e) {
+      console.warn("[WebStorageHelper] Failed to save key:", key, e);
     }
   }
 
   load<T>(key: string, fallbackValue: T) {
-    const fullKey = `${this.keyPrefix}.${key}`;
     try {
-      const json = localStorage.getItem(fullKey) || "";
+      // Try new format first
+      const result = storageService.loadSync<T | undefined>(key, this.keyPrefix, undefined);
+      if (result !== undefined) return result;
+
+      // Backward-compatible read from legacy format
+      const fullKey = `${this.keyPrefix}.${key}`;
+      const json = this.storage.getItem(fullKey) || "";
       return JSON.parse(json) as T;
-    } catch {
+    } catch (e) {
+      console.warn("[WebStorageHelper] Failed to load key:", key, e);
       return fallbackValue;
     }
   }
@@ -53,17 +58,19 @@ export class WebStorageHelper {
   remove(key: string) {
     const fullKey = `${this.keyPrefix}.${key}`;
     try {
-      localStorage.removeItem(fullKey);
-    } catch {
-      // nothing
+      storageService.remove(key, this.keyPrefix);
+      // Also clean up any legacy key
+      this.storage.removeItem(fullKey);
+    } catch (e) {
+      console.warn("[WebStorageHelper] Failed to remove key:", key, e);
     }
   }
 
   keys(): string[] {
-    const { length } = localStorage;
+    const { length } = this.storage;
     const keys: string[] = [];
     for (let i = 0; i < length; i++) {
-      const key = localStorage.key(i);
+      const key = this.storage.key(i);
       if (key && key.startsWith(this.keyPrefix)) {
         keys.push(key);
       }
@@ -72,9 +79,11 @@ export class WebStorageHelper {
   }
 
   clear() {
+    storageService.clearNamespace(this.keyPrefix);
+    // Also clear any legacy keys
     const keys = this.keys();
     keys.forEach((key) => {
-      localStorage.removeItem(key);
+      this.storage.removeItem(key);
     });
   }
 }

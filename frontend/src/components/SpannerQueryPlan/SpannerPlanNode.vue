@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <div class="plan-node" :class="{ 'is-scalar': isScalar }">
     <div class="node-content" @click="toggleExpanded">

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { ChevronLeft } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import logoIcon from "@/assets/logo-icon.svg";

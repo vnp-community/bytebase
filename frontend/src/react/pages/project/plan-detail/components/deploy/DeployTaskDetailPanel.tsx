@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { CalendarClock, EllipsisVertical, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";

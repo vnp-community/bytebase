@@ -22,10 +22,14 @@ const extractHostPort = (url: string) => {
   return parsed.host;
 };
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // TASK-W-027: Strip console.debug in production builds
+  esbuild: {
+    pure: mode === "production" ? ["console.debug"] : [],
+  },
   plugins: [
     legacy({
-      targets: ["> 0.08%, not dead"],
+      targets: ["Chrome >= 84, Firefox >= 79, Safari >= 14.1, Edge >= 84"],
       additionalLegacyPolyfills: ["regenerator-runtime/runtime"],
     }),
     {
@@ -37,7 +41,13 @@ export default defineConfig({
           loader: "tsx",
           jsx: "automatic",
           jsxImportSource: "react",
-          tsconfigRaw: { compilerOptions: {} },
+          tsconfigRaw: {
+            compilerOptions: {
+              strict: true,
+              target: "ES2022",
+              useDefineForClassFields: true,
+            }
+          },
           sourcemap: true,
           sourcefile: id,
         });
@@ -71,7 +81,7 @@ export default defineConfig({
     exportCspHashes(),
   ],
   build: {
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 500,
     rollupOptions: {
       input: {
         main: resolve(__dirname, "index.html"),
@@ -79,21 +89,16 @@ export default defineConfig({
       },
       output: {
         manualChunks: (id) => {
-          // Monaco Editor - separate chunk
-          if (id.includes("monaco-editor") || id.includes("monaco-vscode")) {
-            return "monaco-editor";
-          }
-          // SQL tools - separate chunk
-          if (id.includes("sql-formatter") || id.includes("antlr4")) {
-            return "sql-tools";
-          }
-          // UI framework
-          if (id.includes("naive-ui")) {
-            return "ui-framework";
-          }
-          // Utilities
-          if (id.includes("lodash") || id.includes("dayjs")) {
-            return "utils";
+          if (id.includes("node_modules")) {
+            const pkgMatch = id.match(/node_modules\/(.+?)\//);
+            if (!pkgMatch) return undefined;
+            const pkg = pkgMatch[1];
+            
+            if (pkg.startsWith("@codingame/monaco") || pkg === "monaco-editor") return "monaco-editor";
+            if (["sql-formatter", "antlr4"].includes(pkg)) return "sql-tools";
+            if (pkg === "naive-ui") return "ui-framework";
+            if (["lodash-es", "dayjs"].includes(pkg)) return "utils";
+            if (["react", "react-dom", "react-i18next", "i18next"].includes(pkg)) return "react-core";
           }
         },
       },
@@ -150,4 +155,4 @@ export default defineConfig({
   worker: {
     format: "es",
   },
-});
+}));

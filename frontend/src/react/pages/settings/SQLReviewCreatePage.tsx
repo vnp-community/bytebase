@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useEffect, useState } from "react";
 import { useSQLReviewStore } from "@/store";
 import { ReviewCreation } from "../../components/sql-review/ReviewCreation";

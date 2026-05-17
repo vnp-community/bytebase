@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Button } from "@/react/components/ui/button";
 import { Tooltip } from "@/react/components/ui/tooltip";
 import { useVueState } from "@/react/hooks/useVueState";

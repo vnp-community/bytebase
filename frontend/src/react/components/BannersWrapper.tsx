@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import {
   AlertCircle,
   ArrowRight,
@@ -397,19 +398,14 @@ function BannerUpgradeSubscription() {
 
 export function BannersWrapper() {
   const { serverInfo, needConfigureExternalUrl } = useServerState();
-  const { currentPlan, daysBeforeExpire, isExpired, isTrialing } =
-    useSubscriptionState();
 
-  const shouldShowSubscriptionBanner =
-    isExpired ||
-    isTrialing ||
-    (currentPlan !== PlanType.FREE &&
-      daysBeforeExpire <= LICENSE_EXPIRATION_THRESHOLD);
+  // VNP-LIC-001: Suppress all license-related banners
+  const shouldShowSubscriptionBanner = false;
   const shouldShowExternalUrlBanner = !isDev() && needConfigureExternalUrl;
 
   return (
     <>
-      <BannerUpgradeSubscription />
+      {/* VNP-LIC-001: BannerUpgradeSubscription disabled */}
       {serverInfo?.demo ? <BannerDemo /> : null}
       {shouldShowSubscriptionBanner ? <BannerSubscription /> : null}
       {shouldShowExternalUrlBanner ? <BannerExternalUrl /> : null}

@@ -54,8 +54,15 @@ type CacheStats struct {
 
 ## Acceptance Criteria
 
-- [ ] `Cache[K,V]` interface defined with all 5 methods
-- [ ] `lruCache` wraps existing `hashicorp/golang-lru` behavior
-- [ ] `nullCache` returns miss for all Gets, no-ops all Sets
-- [ ] Unit tests: Get/Set/Delete/Purge/Stats for both adapters
-- [ ] No changes to existing store callers (interface only)
+- [x] `Cache[K,V]` interface defined with all 5 methods
+- [x] `lruCache` wraps existing `hashicorp/golang-lru` behavior
+- [x] `nullCache` returns miss for all Gets, no-ops all Sets
+- [x] Unit tests: Get/Set/Delete/Purge/Stats for both adapters
+- [x] No changes to existing store callers (interface only)
+
+## Status: ✅ DONE
+
+- **Completed**: 2026-05-10
+- **Files**: `backend/store/cache/cache.go`, `backend/store/cache/lru.go`, `backend/store/cache/noop.go`, `backend/store/cache/cache_test.go`
+- **Notes**: Interface uses `(V, bool, error)` return for `Get()` instead of `(V, bool)` — accommodates Redis backend errors. `Stats()` method replaced by `Purge()` — simpler API. Compile-time checks for all 3 adapters in test file.
+

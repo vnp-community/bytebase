@@ -55,7 +55,7 @@ type APIAuthInterceptor struct {
 	store          *store.Store
 	secret         string
 	licenseService *enterprise.LicenseService
-	bus            *bus.Bus
+	bus            bus.EventBus
 	profile        *config.Profile
 }
 
@@ -64,7 +64,7 @@ func New(
 	store *store.Store,
 	secret string,
 	licenseService *enterprise.LicenseService,
-	bus *bus.Bus,
+	bus bus.EventBus,
 	profile *config.Profile,
 ) *APIAuthInterceptor {
 	return &APIAuthInterceptor{

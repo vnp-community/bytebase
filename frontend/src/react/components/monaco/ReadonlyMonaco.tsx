@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import type * as monaco from "monaco-editor";
 import type { MonacoModule } from "@/components/MonacoEditor";
 import type { Language } from "@/types";

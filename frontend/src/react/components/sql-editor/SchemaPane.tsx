@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 /**
  * Top-level mount-shim for the SchemaPane subtree. The mount registry
  * (`src/react/mount.ts`) discovers React pages via a non-recursive glob

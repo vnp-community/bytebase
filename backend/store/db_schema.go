@@ -26,6 +26,36 @@ type FindDBSchemaMessage struct {
 
 // GetDBSchema gets the schema for a database.
 func (s *Store) GetDBSchema(ctx context.Context, find *FindDBSchemaMessage) (*model.DatabaseMetadata, error) {
+	cacheKey := getDBSchemaCacheKey(find.InstanceID, find.DatabaseName)
+
+	// L1: Fast in-memory (hot entries)
+	if v, ok := s.dbSchemaCache.Get(cacheKey); ok {
+		return v, nil
+	}
+
+	// L2: Compressed (larger capacity, slower)
+	if s.dbSchemaL2Cache != nil {
+		if v, ok := s.dbSchemaL2Cache.Get(cacheKey); ok {
+			s.dbSchemaCache.Add(cacheKey, v) // Promote to L1
+			return v, nil
+		}
+	}
+
+	// L3: Database query
+	result, err := s.queryDBSchema(ctx, find)
+	if err != nil {
+		return nil, err
+	}
+	if result != nil {
+		s.dbSchemaCache.Add(cacheKey, result)
+		if s.dbSchemaL2Cache != nil {
+			s.dbSchemaL2Cache.Add(cacheKey, result)
+		}
+	}
+	return result, nil
+}
+
+func (s *Store) queryDBSchema(ctx context.Context, find *FindDBSchemaMessage) (*model.DatabaseMetadata, error) {
 	q := qb.Q().Space(`
 		SELECT
 			db_schema.metadata,
@@ -59,8 +89,6 @@ func (s *Store) GetDBSchema(ctx context.Context, find *FindDBSchemaMessage) (*mo
 	if err != nil {
 		return nil, err
 	}
-
-	s.dbSchemaCache.Add(getDBSchemaCacheKey(find.InstanceID, find.DatabaseName), dbMetadata)
 
 	return dbMetadata, nil
 }
@@ -127,7 +155,11 @@ func (s *Store) UpsertDBSchema(
 		return err
 	}
 
-	s.dbSchemaCache.Remove(getDBSchemaCacheKey(instanceID, databaseName))
+	cacheKey := getDBSchemaCacheKey(instanceID, databaseName)
+	s.dbSchemaCache.Remove(cacheKey)
+	if s.dbSchemaL2Cache != nil {
+		s.dbSchemaL2Cache.Remove(cacheKey)
+	}
 
 	return nil
 }
@@ -157,7 +189,11 @@ func (s *Store) UpdateDBSchema(ctx context.Context, instanceID, databaseName str
 		return err
 	}
 
-	s.dbSchemaCache.Remove(getDBSchemaCacheKey(instanceID, databaseName))
+	cacheKey := getDBSchemaCacheKey(instanceID, databaseName)
+	s.dbSchemaCache.Remove(cacheKey)
+	if s.dbSchemaL2Cache != nil {
+		s.dbSchemaL2Cache.Remove(cacheKey)
+	}
 
 	return nil
 }

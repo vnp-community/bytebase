@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { ButtonHTMLAttributes } from "react";
 import { cn } from "@/react/lib/utils";

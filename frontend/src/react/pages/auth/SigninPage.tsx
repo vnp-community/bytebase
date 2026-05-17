@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AuthFooter } from "@/react/components/auth/AuthFooter";

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import logoIcon from "@/assets/logo-icon.svg";
 import { Separator } from "@/react/components/ui/separator";
 import { useVueState } from "@/react/hooks/useVueState";

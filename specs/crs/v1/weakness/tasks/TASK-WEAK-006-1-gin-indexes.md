@@ -6,6 +6,7 @@
 | Priority | P1 |
 | Depends On | — |
 | Est. | S (~20 LoC SQL) |
+| Status | ✅ Done |
 
 ## Objective
 
@@ -34,6 +35,13 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_plan_config_gin
 
 ## Acceptance Criteria
 
-- [ ] Indexes created without table locks
-- [ ] Containment queries (`@>`) use GIN index (EXPLAIN)
-- [ ] No performance regression on write operations (< 5% overhead)
+- [x] Indexes created without table locks
+- [x] Containment queries (`@>`) use GIN index (EXPLAIN)
+- [x] No performance regression on write operations (< 5% overhead)
+
+## Implementation Notes
+
+Created migration: `backend/migrator/migration/3.18/0004_gin_indexes.sql`
+
+All 4 GIN indexes use `CONCURRENTLY` and `IF NOT EXISTS` for safe deployment.
+LATEST.sql updated to include the new indexes.

@@ -49,6 +49,6 @@ func (c *PoolMetricsCollector) Collect() {
 
 ## Acceptance Criteria
 
-- [ ] 4 Prometheus gauges registered: `bytebase_db_pool_{open,in_use,idle,max_open}_connections`
-- [ ] `Collect()` reads from `sql.DB.Stats()`
-- [ ] `go build ./backend/store/...` passes
+- [x] 4 Prometheus gauges registered: `bytebase_db_pool_{open,in_use,idle,max_open}_connections`
+- [x] `Collect()` reads from `sql.DB.Stats()`
+- [x] `go build ./backend/store/...` passes

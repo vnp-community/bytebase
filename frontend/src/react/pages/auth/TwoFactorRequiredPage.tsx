@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useTranslation } from "react-i18next";
 import { Alert, AlertDescription } from "@/react/components/ui/alert";
 import { TwoFactorSetupPage } from "@/react/pages/settings/two-factor/TwoFactorSetupPage";

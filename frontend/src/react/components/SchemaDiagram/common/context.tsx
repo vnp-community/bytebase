@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import Emittery from "emittery";
 import { uniqueId } from "lodash-es";
 import {

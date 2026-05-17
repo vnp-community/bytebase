@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { create } from "@bufbuild/protobuf";
 import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";

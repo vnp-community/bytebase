@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <div ref="scrollerRef" class="flex-1 overflow-y-auto">
     <template v-if="conversation">

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Code2, Loader2, MessageSquareMore, Rocket, X } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";

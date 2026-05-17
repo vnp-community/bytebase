@@ -46,6 +46,13 @@ migrateStorageKeys();
 
   app.use(pinia);
 
+  // Dev-mode cache monitor — warns when entity cache grows beyond 500
+  import("@/store/cache-monitor").then(({ startCacheMonitor }) => {
+    import("@/store/cache").then(({ getEntityCacheRegistry }) => {
+      startCacheMonitor(getEntityCacheRegistry);
+    });
+  });
+
   const currentUser = await useAuthStore().fetchCurrentUser();
   // Initialize stores.
   const initPromises: Promise<unknown>[] = [

@@ -154,7 +154,7 @@ func (s *Syncer) trySyncAll(ctx context.Context) {
 		}
 	}()
 
-	lock, acquired, err := store.TryAdvisoryLock(ctx, s.store.GetDB(), store.AdvisoryLockKeySchemaSyncer)
+	lock, acquired, err := store.TryAdvisoryLock(ctx, s.store.GetRunnerDB(), store.AdvisoryLockKeySchemaSyncer)
 	if err != nil {
 		slog.Error("Failed to acquire schema syncer advisory lock", log.BBError(err))
 		return
@@ -201,38 +201,44 @@ func (s *Syncer) trySyncAll(ctx context.Context) {
 	}
 	wp.Wait()
 
-	instancesMap := map[string]*store.InstanceMessage{}
+	// T-018: Per-instance database pagination instead of loading all databases.
+	// This bounds memory to O(databases_per_instance) instead of O(total_databases).
+	dbPool := s.newAdaptivePool()
 	for _, instance := range instances {
-		instancesMap[instance.ResourceID] = instance
-	}
-
-	databases, err := s.store.ListDatabases(ctx, &store.FindDatabaseMessage{})
-	if err != nil {
-		slog.Error("Failed to retrieve databases", log.BBError(err))
-		return
-	}
-	for _, database := range databases {
-		database := database
-		if database.Deleted {
-			continue
-		}
-		instance, ok := instancesMap[database.InstanceID]
-		if !ok {
-			continue
-		}
-		// The database inherits the sync interval from the instance.
-		interval := s.getOrDefaultSyncInterval(ctx, instance)
+		inst := instance
+		interval := s.getOrDefaultSyncInterval(ctx, inst)
 		if interval == defaultSyncInterval {
 			continue
 		}
+
+		dbPool.Go(func() {
+			s.syncInstanceDatabases(ctx, inst, now, interval)
+		})
+	}
+	dbPool.Wait()
+}
+
+// syncInstanceDatabases loads databases for a single instance and enqueues
+// those that are due for sync. This limits peak memory to the database count
+// of a single instance rather than the entire fleet.
+func (s *Syncer) syncInstanceDatabases(ctx context.Context, instance *store.InstanceMessage, now time.Time, interval time.Duration) {
+	databases, err := s.store.ListDatabases(ctx, &store.FindDatabaseMessage{
+		InstanceID: &instance.ResourceID,
+		Workspace:  instance.Workspace,
+	})
+	if err != nil {
+		slog.Error("sync list failed", slog.String("instance", instance.ResourceID), log.BBError(err))
+		return
+	}
+	for _, database := range databases {
+		if database.Deleted {
+			continue
+		}
 		lastSyncTime := getOrDefaultLastSyncTime(database.Metadata.LastSyncTime)
-		// lastSyncTime + syncInterval > now
-		// Next round not started yet.
 		nextSyncTime := lastSyncTime.Add(interval)
 		if now.Before(nextSyncTime) {
 			continue
 		}
-
 		s.databaseSyncMap.Store(database.String(), database)
 	}
 }

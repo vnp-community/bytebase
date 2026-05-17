@@ -6,6 +6,8 @@
 | Priority | P0 |
 | Depends On | — |
 | Est. | S (~60 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-12 |
 
 ## Objective
 
@@ -18,29 +20,41 @@ Extract `PermissionChecker` from IAM Manager and `FeatureChecker` from LicenseSe
 | CREATE | `backend/component/iam/interfaces.go` |
 | CREATE | `backend/enterprise/interfaces.go` |
 
-## Specification
+## Implementation Notes
 
-### IAM interface
+### IAM Interfaces (`backend/component/iam/interfaces.go`)
 
-```go
-type PermissionChecker interface {
-    CheckPermission(ctx context.Context, p permission.Permission, user *store.UserMessage, workspaceID string, projectIDs ...string) (bool, error)
-}
-var _ PermissionChecker = (*Manager)(nil)
-```
+- `PermissionChecker` — `CheckPermission(ctx, permission, user, workspaceID, projectIDs...)`
+- `PermissionProvider` — `GetPermissions(ctx, workspaceID, user)`
+- `GroupResolver` — `GetUserGroups(ctx, workspaceID, email)`
+- `CacheReloader` — `ReloadCache(ctx)`
+- `IAMService` — composed superset of all above
 
-### Enterprise interface
+Compile-time assertion: `var _ PermissionChecker = (*Manager)(nil)`
 
-```go
-type FeatureChecker interface {
-    IsFeatureEnabled(ctx context.Context, workspaceID string, feature v1pb.PlanFeature) error
-}
-var _ FeatureChecker = (*LicenseService)(nil)
+### Enterprise Interfaces (`backend/enterprise/interfaces.go`)
+
+- `FeatureChecker` — `IsFeatureEnabled(ctx, workspaceID, feature)`
+- `PlanReader` — `GetCurrentPlan(ctx, workspaceID)`
+- `LimitReader` — `GetUserLimit(ctx, workspaceID)`
+- `LicenseManager` — composed superset
+
+Compile-time assertion: `var _ FeatureChecker = (*LicenseService)(nil)`
+
+### DI Integration
+
+- `backend/api/v1/auth_service_di.go` — `NewAuthServiceWithDeps()` constructor accepts `AuthDeps` with `FeatureChecker` and `PermissionChecker` interfaces
+
+### Verification
+
+```bash
+go build ./backend/component/iam/...   # ✅ passes
+go build ./backend/enterprise/...      # ✅ passes
 ```
 
 ## Acceptance Criteria
 
-- [ ] Interfaces defined in respective packages
-- [ ] Compile-time assertions pass
-- [ ] Existing Manager/LicenseService unmodified
-- [ ] `go build` passes across all packages
+- [x] Interfaces defined in respective packages
+- [x] Compile-time assertions pass
+- [x] Existing Manager/LicenseService unmodified
+- [x] `go build` passes across all packages

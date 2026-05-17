@@ -6,10 +6,12 @@
 | Priority | P1 |
 | Depends On | TASK-WEAK-008-1 |
 | Est. | M (~120 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-12 |
 
 ## Objective
 
-Replace `time.Sleep(100ms)` reconnection with file stability check + atomic pool swap + configurable drain timeout. Fixes race condition in `db_connection.go:137-178`.
+Replace `time.Sleep(100ms)` reconnection with file stability check + atomic pool swap + configurable drain timeout. Fixes race condition.
 
 ## Files
 
@@ -17,39 +19,18 @@ Replace `time.Sleep(100ms)` reconnection with file stability check + atomic pool
 |--------|------|
 | MODIFY | `backend/store/pool_manager.go` — add `reloadConnection()` |
 
-## Specification
+## Implementation Notes
 
-### File stability check
-
-Read PG URL file twice with 50ms interval, verify stable:
-```go
-for retries := 0; retries < 5; retries++ {
-    url1, _ := readURLFromFile(filePath)
-    time.Sleep(50 * time.Millisecond)
-    url2, _ := readURLFromFile(filePath)
-    if url1 == url2 { newURL = url1; break }
-}
-```
-
-### Atomic pool swap
-
-```go
-pm.mu.Lock()
-oldAPI, oldRunner := pm.apiPool, pm.runnerPool
-pm.apiPool, pm.runnerPool = newAPI, newRunner
-pm.mu.Unlock()
-```
-
-### Graceful drain
-
-Old pools drained with configurable timeout (`PG_POOL_DRAIN_TIMEOUT`, default 5min) instead of hardcoded 1 hour.
-
-Metric: `bytebase_db_pool_reconnects_total` counter.
+- **File Stability Check:** Implemented `readStableURL` to read the PG URL file twice with a 50ms delay, verifying the content is identical. This avoids reading a partially written file.
+- **Atomic Pool Swap:** Reconnection creates *new* pools completely before swapping. The swap is guarded by a `sync.RWMutex` to ensure zero downtime and no race conditions for in-flight requests calling `GetDB()`.
+- **Graceful Drain:** The old `apiPool` and `runnerPool` are passed to an asynchronous `drainPool` function.
+- **Drain Config:** Drain time is configurable via `PoolConfig.DrainTimeout` (defaults to 5 minutes instead of the old hardcoded 1 hour). After the timeout, connections are forcefully closed to free resources.
+- **Observability:** Reconnections increment the `bytebase_db_pool_reconnects_total` metric.
 
 ## Acceptance Criteria
 
-- [ ] No `time.Sleep(100ms)` race condition
-- [ ] File read stability verified before reconnect
-- [ ] Pool swap is atomic (RWMutex)
-- [ ] Old pools drained within configurable timeout
-- [ ] Reconnect counter incremented
+- [x] No `time.Sleep(100ms)` race condition
+- [x] File read stability verified before reconnect
+- [x] Pool swap is atomic (RWMutex)
+- [x] Old pools drained within configurable timeout
+- [x] Reconnect counter incremented

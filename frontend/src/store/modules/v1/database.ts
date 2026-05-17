@@ -45,6 +45,7 @@ import {
 } from "./common";
 import { useDBSchemaV1Store } from "./dbSchema";
 import { useProjectV1Store } from "./project";
+import { useCache } from "@/store/cache";
 
 export interface DatabaseFilter {
   project?: string;
@@ -154,7 +155,7 @@ const getListDatabaseFilter = (filter: DatabaseFilter): string => {
 export const useDatabaseV1Store = defineStore("database_v1", () => {
   const databaseMapByName = reactive(new Map<string, Database>());
   const dbSchemaStore = useDBSchemaV1Store();
-  const databaseRequestCache = new Map<string, Promise<Database>>();
+  const { getRequest, setRequest } = useCache<[string], Database>("database");
 
   // Getters
   const databaseList = computed(() => {
@@ -286,10 +287,10 @@ export const useDatabaseV1Store = defineStore("database_v1", () => {
     if (!isValidDatabaseName(name)) {
       return unknownDatabase();
     }
-    const cached = databaseRequestCache.get(name);
+    const cached = getRequest([name]);
     if (cached) return cached;
     const request = fetchDatabaseByName(name, silent);
-    databaseRequestCache.set(name, request);
+    setRequest([name], request);
     return request;
   };
 

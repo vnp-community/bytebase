@@ -146,6 +146,8 @@ type TaskRunResult struct {
 	HasPriorBackup bool `protobuf:"varint,6,opt,name=has_prior_backup,json=hasPriorBackup,proto3" json:"has_prior_backup,omitempty"`
 	// Resource ID of the export archive generated for export tasks.
 	ExportArchiveId string `protobuf:"bytes,9,opt,name=export_archive_id,json=exportArchiveId,proto3" json:"export_archive_id,omitempty"`
+	// TASK-WEAK-003-3: Non-fatal warnings from migration execution.
+	Warnings        []string `protobuf:"bytes,10,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -199,6 +201,13 @@ func (x *TaskRunResult) GetExportArchiveId() string {
 		return x.ExportArchiveId
 	}
 	return ""
+}
+
+func (x *TaskRunResult) GetWarnings() []string {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
 }
 
 // SchedulerInfo contains information about task scheduling and execution delays.

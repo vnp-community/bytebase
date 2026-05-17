@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { ReactElement } from "react";
 import { act } from "react";

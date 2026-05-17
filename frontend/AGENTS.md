@@ -5,6 +5,56 @@ This file provides additional guidance to AI coding assistants working under `./
 - Follow the repository-wide guidance in `../AGENTS.md`.
 - Treat this file as frontend-specific additions, not a replacement for the root instructions.
 
+## AI Context System — START HERE
+
+**Before doing any task, read `.ai-context/INDEX.md` first.** It contains:
+- Decision tree for common tasks (add page, call API, fix bug, manage state)
+- Module quick reference table
+- List of files to NEVER read (saves ~97K lines of context budget)
+- Links to all context guide files
+
+**Key context files** (read only the ones relevant to your task):
+| File | When to Read |
+|---|---|
+| `.ai-context/FRAMEWORK_MAP.md` | Deciding if code goes in Vue or React |
+| `.ai-context/STATE_GUIDE.md` | Adding/modifying state management |
+| `.ai-context/BRIDGE_CONTRACT.md` | Working with Vue↔React interop |
+| `.ai-context/CONNECTRPC_GUIDE.md` | Making API calls |
+| `.ai-context/ERROR_POLICY.md` | Adding error handling |
+| `.ai-context/GLOSSARY.md` | Understanding domain objects |
+| `.ai-context/WORKFLOWS.md` | Understanding business processes |
+| `.ai-context/NEW_PAGE_PLAYBOOK.md` | Adding a new page |
+| `.ai-context/GUARD_FLOWCHART.md` | Debugging navigation issues |
+
+### Pre-Task Checklist
+
+Before writing any code, verify:
+- [ ] Read `.ai-context/INDEX.md`
+- [ ] Identified the correct framework (Vue or React) via `FRAMEWORK_MAP.md`
+- [ ] Checked if the component/page already exists (don't recreate)
+- [ ] Identified the correct API client from `CONNECTRPC_GUIDE.md`
+- [ ] Confirmed the state management approach from `STATE_GUIDE.md`
+
+### Post-Task Checklist
+
+After writing code, verify:
+- [ ] No new `useVueState` calls added (use TanStack Query or Zustand)
+- [ ] No raw `fetch()` calls for `/v1/` endpoints (use ConnectRPC clients)
+- [ ] All `update*` calls include `updateMask`
+- [ ] Proto-ES types constructed with `create(Schema, {...})`, not `new Constructor()`
+- [ ] Named exports used (not `export default`)
+- [ ] Semantic color tokens used (not raw colors like `bg-blue-500`)
+- [ ] No raw global `z-index` on overlays
+- [ ] `pnpm --dir frontend check` passes
+
+### Files to NEVER Read
+
+These are auto-generated and will waste your context budget:
+- `src/types/proto-es/**` (~38K LOC) — use `.ai-context/CONNECTRPC_GUIDE.md` instead
+- `src/plugins/agent/logic/tools/gen/openapi-index.ts` (~14K LOC) — marked `@ai-exclude`
+- `src/react/plugins/agent/logic/tools/gen/openapi-index.ts` (~15K LOC) — marked `@ai-exclude`
+- `pnpm-lock.yaml` (~30K LOC) — use `package.json` instead
+
 ## React Migration
 
 - For Vue-to-React migrations in `frontend/`, read and follow `../docs/plans/2026-04-08-react-migration-playbook.md`.
@@ -47,6 +97,14 @@ React UI components live in `src/react/components/ui/` and follow shadcn-style p
   - Do not hide raw global overlay classes in constants, imported helpers, `cn()` inputs, or interpolated template literals. A value like `fixed inset-0 z-50` is still forbidden even when it is not written directly in `className`.
   - When adding or changing React overlays, run `pnpm --dir frontend check` or `node frontend/scripts/check-react-layering.mjs` before handing off. The scanner is intended to catch raw high-z overlays, forbidden body portals, and policy drift in feature code.
   - The scanner is a guardrail, not proof of policy compliance. It intentionally avoids full static analysis, so imported, dynamic, shadowed, or complex expressions may be unresolved; passing the check does not permit raw global z-index overlays or body portals.
+- **Overlay Portals — ALWAYS use createOverlayPortal()**
+  ```typescript
+  import { createOverlayPortal } from "@/react/lib/overlay";
+  // ✅ Correct
+  return createOverlayPortal(<MyModal />, "overlay");
+  // ❌ NEVER
+  return createPortal(<MyModal />, document.body);
+  ```
 - **Dialog vs Sheet** — use `<Sheet>` (right-side drawer, in `src/react/components/ui/sheet.tsx`) for **creating or editing a resource**. Use `<Dialog>` for **confirmations, single-field prompts, critical interrupts, and read-only result displays**. The dividing line is whether the user is filling out a form with multiple fields — drawers keep the parent list/table visible behind a scrim and scale to multi-section forms, while dialogs are for short blocking interactions. `AlertDialog` is the right pick for destructive confirms that need an explicit acknowledgment.
 - **Sheet width tiers** — `<SheetContent>` accepts a `width` variant. Pick the tier that matches the form complexity; don't inline ad-hoc widths. Add a new tier to `sheet.tsx` only if a genuinely new size is needed.
   - `narrow` (384px) — single-field pickers, short 2–3 field forms, environment/project selection, read-only display sheets

@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <BBModal v-if="open && feature" :title="title" @close="$emit('cancel')">
     <div class="min-w-0 md:min-w-100 max-w-4xl mb-2">

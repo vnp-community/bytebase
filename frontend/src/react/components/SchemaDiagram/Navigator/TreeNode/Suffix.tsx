@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { FocusButton } from "../../common/FocusButton";
 import type { NavigatorTreeNode } from "../types";
 import { isTypedNode } from "../utils";

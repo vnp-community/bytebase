@@ -7,7 +7,7 @@
 | **Title**          | Content Security Policy Hardening — Remove unsafe-inline |
 | **Category**       | Security (SEC)                                           |
 | **Priority**       | P1 — High                                                |
-| **Status**         | Draft                                                    |
+| **Status**         | In Progress (Phase 1 + 5 Complete)                       |
 | **Created**        | 2026-05-08                                               |
 | **Author**         | VNP AI Ops Team                                          |
 | **PRD Refs**       | SEC-01 (IAM), SEC-15 (Data Masking), SQL-01 (SQL Editor) |

@@ -6,6 +6,9 @@
 | Priority | P1 |
 | Depends On | — |
 | Est. | S (~30 LoC changes) |
+| Status | ✅ Done |
+| Completed | 2026-05-12 |
+| Notes | 3 blanket `// nolint` in `masking_evaluator.go` → `//nolint:unused` with justification. 1 `nolint:nilerr` in `user_service.go` → improved justification. `sql_service.go` reference stale (file is 53 lines, no nolint found). |
 
 ## Objective
 

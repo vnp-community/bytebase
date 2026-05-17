@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	storepb "github.com/bytebase/bytebase/backend/generated-go/store"
 	"github.com/bytebase/bytebase/backend/store/model"
@@ -278,6 +279,46 @@ type SyncHistoryReader interface {
 }
 
 // =============================================================================
+// AUTH DOMAIN (workspace, IDP, group, token, email verification)
+// =============================================================================
+
+// AuthStore provides data access methods required by the AuthService.
+// It covers workspace management, identity providers, group sync,
+// web refresh tokens, email verification, and service/workload identity lookups.
+type AuthStore interface {
+	// Workspace management
+	FindWorkspace(ctx context.Context, find *FindWorkspaceMessage) (*WorkspaceMessage, error)
+	CreateWorkspace(ctx context.Context, create *WorkspaceMessage, adminEmail string) (*WorkspaceMessage, error)
+	PatchWorkspaceIamPolicy(ctx context.Context, patch *PatchIamPolicyMessage) (*IamPolicyMessage, error)
+
+	// Identity providers
+	GetIdentityProviderByID(ctx context.Context, resourceID string) (*IdentityProviderMessage, error)
+
+	// Group management (for IDP group sync)
+	ListGroups(ctx context.Context, find *FindGroupMessage) ([]*GroupMessage, error)
+	UpdateGroup(ctx context.Context, patch *UpdateGroupMessage) (*GroupMessage, error)
+
+	// Audit logging
+	SearchAuditLogs(ctx context.Context, find *AuditLogFind) ([]*AuditLog, error)
+
+	// Web refresh tokens
+	CreateWebRefreshToken(ctx context.Context, create *WebRefreshTokenMessage) error
+	GetAndDeleteWebRefreshToken(ctx context.Context, tokenHash string) (*WebRefreshTokenMessage, error)
+	DeleteWebRefreshToken(ctx context.Context, tokenHash string) error
+	DeleteWebRefreshTokensByUser(ctx context.Context, userEmail string) error
+
+	// Email verification
+	UpsertEmailVerificationCodeIfCooldownExpired(ctx context.Context, msg *EmailVerificationCodeMessage, cooldown time.Duration) (bool, error)
+	GetEmailVerificationCode(ctx context.Context, email string, purpose storepb.EmailVerificationCodePurpose) (*EmailVerificationCodeMessage, error)
+	IncrementEmailVerificationCodeAttempts(ctx context.Context, email string, purpose storepb.EmailVerificationCodePurpose) error
+	DeleteEmailVerificationCodeIfMatch(ctx context.Context, email string, purpose storepb.EmailVerificationCodePurpose, codeHash string) error
+
+	// Service/Workload identity lookups
+	GetServiceAccountByEmail(ctx context.Context, email string) (*ServiceAccountMessage, error)
+	GetWorkloadIdentityByEmail(ctx context.Context, email string) (*WorkloadIdentityMessage, error)
+}
+
+// =============================================================================
 // AGGREGATE INTERFACE
 // =============================================================================
 
@@ -310,7 +351,9 @@ type DataStore interface {
 	SignalWriter
 	PlanWebhookWriter
 	SyncHistoryReader
+	AuthStore
 	GetDB() *sql.DB
 	Close() error
 	DeleteCache()
 }
+

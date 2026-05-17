@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import normalizeWheel from "normalize-wheel";
 import { useCallback, useEffect, useRef } from "react";
 import { minmax } from "@/utils/math";

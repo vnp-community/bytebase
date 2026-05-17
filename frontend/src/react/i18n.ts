@@ -1,15 +1,21 @@
 import i18next from "i18next";
 import { initReactI18next } from "react-i18next";
-import enUSDynamic from "@/react/locales/dynamic/en-US.json";
-import esESDynamic from "@/react/locales/dynamic/es-ES.json";
-import jaJPDynamic from "@/react/locales/dynamic/ja-JP.json";
-import viVNDynamic from "@/react/locales/dynamic/vi-VN.json";
-import zhCNDynamic from "@/react/locales/dynamic/zh-CN.json";
-import enUS from "@/react/locales/en-US.json";
-import esES from "@/react/locales/es-ES.json";
-import jaJP from "@/react/locales/ja-JP.json";
-import viVN from "@/react/locales/vi-VN.json";
-import zhCN from "@/react/locales/zh-CN.json";
+import { localeManager } from "@/localeManager";
+
+// TASK-W-029: Load translations from the shared Vue locale source.
+// Only React-specific (dynamic) keys are kept in separate files.
+import sharedEnUS from "@/locales/en-US.json";
+import sharedZhCN from "@/locales/zh-CN.json";
+import sharedEsES from "@/locales/es-ES.json";
+import sharedJaJP from "@/locales/ja-JP.json";
+import sharedViVN from "@/locales/vi-VN.json";
+
+// React-only dynamic keys (~10-15KB each instead of ~200KB duplicates)
+import reactEnUS from "@/react/locales/dynamic/en-US.json";
+import reactZhCN from "@/react/locales/dynamic/zh-CN.json";
+import reactEsES from "@/react/locales/dynamic/es-ES.json";
+import reactJaJP from "@/react/locales/dynamic/ja-JP.json";
+import reactViVN from "@/react/locales/dynamic/vi-VN.json";
 
 const STORAGE_KEY_LANGUAGE = "bb.language";
 
@@ -33,12 +39,28 @@ function getLocale(): string {
   return mapping[nav] ?? (nav.includes("-") ? nav : "en-US");
 }
 
+// Merge shared (Vue-compatible) translations with React-specific dynamic keys
 const resources = {
-  "en-US": { translation: { ...enUS, dynamic: enUSDynamic } },
-  "zh-CN": { translation: { ...zhCN, dynamic: zhCNDynamic } },
-  "es-ES": { translation: { ...esES, dynamic: esESDynamic } },
-  "ja-JP": { translation: { ...jaJP, dynamic: jaJPDynamic } },
-  "vi-VN": { translation: { ...viVN, dynamic: viVNDynamic } },
+  "en-US": {
+    translation: sharedEnUS,
+    react: reactEnUS,
+  },
+  "zh-CN": {
+    translation: sharedZhCN,
+    react: reactZhCN,
+  },
+  "es-ES": {
+    translation: sharedEsES,
+    react: reactEsES,
+  },
+  "ja-JP": {
+    translation: sharedJaJP,
+    react: reactJaJP,
+  },
+  "vi-VN": {
+    translation: sharedViVN,
+    react: reactViVN,
+  },
 };
 
 const i18n: import("i18next").i18n = i18next.createInstance();
@@ -47,10 +69,19 @@ export const i18nReady = i18n.use(initReactI18next).init({
   resources,
   lng: getLocale(),
   fallbackLng: "en-US",
+  ns: ["translation", "react"],
+  defaultNS: "translation",
   interpolation: {
     escapeValue: false,
   },
   initImmediate: false,
+}).then(() => {
+  localeManager.subscribe(async (newLocale) => {
+    if (i18next.language !== newLocale) {
+      await i18next.changeLanguage(newLocale);
+    }
+  });
 });
 
 export default i18n;
+

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import type { TreeNode } from "../schemaTree";
 import { CommonNode } from "./CommonNode";
 import { TriggerIcon } from "./icons";

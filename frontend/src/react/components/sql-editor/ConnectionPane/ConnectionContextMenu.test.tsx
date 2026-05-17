@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { act, createRef, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, describe, expect, test, vi } from "vitest";

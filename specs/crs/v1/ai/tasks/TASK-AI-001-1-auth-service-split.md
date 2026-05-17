@@ -7,6 +7,7 @@
 | Depends On | — |
 | Status | ✅ DONE |
 | Completed | 2025-05-09 |
+| Verified | 2025-05-10 |
 | Est. | M (move ~1700 LoC across files) |
 
 ## Objective
@@ -25,11 +26,12 @@ Split `auth_service.go` (1930 lines) into 7 domain files. Zero functional change
 | CREATE | `backend/api/v1/auth_service_password.go` — Password reset, email verification codes | 386 |
 | CREATE | `backend/api/v1/auth_service_helpers.go` — Workspace resolution, account restrictions, utilities | 269 |
 
-### Verification
+### Verification (2025-05-10 re-verified)
 
 ```bash
 go build ./backend/api/v1/  # ✅ PASS
 go vet ./backend/api/v1/    # ✅ PASS (exit 0)
+# Total: 1996 lines across 7 files
 ```
 
 ## Acceptance Criteria
@@ -39,4 +41,3 @@ go vet ./backend/api/v1/    # ✅ PASS (exit 0)
 - [x] `go build` passes — no compile errors
 - [x] `go vet` passes — no issues
 - [x] No new imports added (same package)
-

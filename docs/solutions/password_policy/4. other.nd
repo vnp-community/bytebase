@@ -1,0 +1,116 @@
+Dựa trên toàn bộ nhu cầu bạn đang triển khai (password policy, user lifecycle, audit DB, rotation, notify, RBAC…), dưới đây là các open-source project phù hợp, chia theo từng nhóm chức năng thực tế bạn đang cần:
+
+1. Quản lý secret / password / rotation (quan trọng nhất)
+🔐 HashiCorp Vault
+Quản lý mật khẩu DB, API key, credential tập trung
+Hỗ trợ dynamic DB credentials (Oracle, PostgreSQL, MySQL, SQLServer)
+Auto rotate password (rất phù hợp với Service User)
+Audit đầy đủ (ai lấy secret, khi nào)
+
+👉 Phù hợp nhất với bài toán của bạn
+
+🔐 Bitwarden (self-host)
+Password manager cho user/owner
+Lưu trữ và chia sẻ credential an toàn
+Có thể dùng cho quản lý user DB thủ công
+🔐 Passbolt
+Password manager cho team Dev/DBA
+Phân quyền chia sẻ password
+Audit truy cập password
+2. Quản lý access / RBAC / IAM
+👤 Keycloak
+Quản lý user, role, RBAC
+SSO, OAuth2, OpenID Connect
+Có thể map với DB access layer
+
+👉 Dùng cho:
+
+SSO DB portal
+Quản lý quyền user tập trung
+👤 Casbin
+Engine phân quyền RBAC/ABAC
+Nhúng vào tool nội bộ (portal cấp quyền DB)
+Rất linh hoạt cho custom matrix quyền của bạn
+3. Database audit / monitoring / activity tracking
+📊 pgAudit
+Audit truy vấn PostgreSQL
+Ghi log chi tiết SELECT/INSERT/DDL
+Phù hợp compliance
+📊 Percona Monitoring and Management
+Monitoring MySQL/PostgreSQL
+Query analytics
+Audit activity
+📊 Elastic Stack
+Thu thập log DB audit
+Search & visualize
+Dùng cho centralized audit (ANHT plan của bạn)
+📊 Apache SkyWalking
+Theo dõi trace ứng dụng → DB
+Phát hiện truy vấn bất thường
+4. Quản lý DB access / bastion / proxy (rất nên dùng)
+🔑 Teleport
+DB access proxy (Postgres, MySQL, MongoDB…)
+Không cần share password trực tiếp
+Audit session đầy đủ
+
+👉 Rất mạnh cho:
+
+Kiểm soát truy cập DB
+Replace việc cấp user trực tiếp
+🔑 CloudBeaver
+UI quản lý DB
+Có RBAC
+Có thể tích hợp SSO
+5. Password policy / rotation / compliance automation
+⚙️ Open Policy Agent
+Viết rule kiểm soát policy (password, access…)
+Tích hợp vào pipeline hoặc tool nội bộ
+⚙️ Lefthook
+Không trực tiếp DB nhưng có thể enforce policy dev (no hardcode password)
+⚙️ Trivy
+Scan config/app để phát hiện hardcoded secrets
+6. Notification / alert (password hết hạn)
+🔔 Prometheus + Alertmanager
+Alert khi password sắp hết hạn
+Hook với script DB
+🔔 n8n
+Automation gửi email/slack
+Dễ build flow notify password expiry
+🔔 Apache Airflow
+Schedule job kiểm tra password expiry
+Gửi notify định kỳ
+7. DevOps / automation (triển khai hàng loạt)
+⚙️ Ansible
+Tạo user DB hàng loạt
+Apply password policy
+Rotate password
+
+👉 Bạn có DB Ansible Tower → rất hợp
+
+⚙️ Terraform
+Quản lý DB user như code
+Version control quyền truy cập
+8. Tổng hợp kiến trúc đề xuất (best practice)
+
+Bạn đang làm đúng hướng, nhưng nếu tối ưu hơn:
+
+Stack khuyến nghị:
+Vault → quản lý password + rotation
+Teleport → truy cập DB không cần password
+Keycloak → SSO + RBAC
+ELK → audit log
+Prometheus + Alertmanager → cảnh báo expiry
+Ansible → rollout mass user
+9. Mapping với hệ thống bạn đang triển khai
+Nhu cầu của bạn	Tool phù hợp
+Password policy	Vault + DB native profile
+Rotate password	Vault / Ansible
+Audit DB	ELK + pgAudit
+Quản lý user	Keycloak / custom portal + Casbin
+Notify hết hạn	Airflow / n8n
+Truy cập DB an toàn	Teleport
+Hardcode password	Trivy
+Kết luận
+Nếu chỉ chọn 1 tool quan trọng nhất → dùng Vault
+Nếu build full hệ thống chuẩn enterprise → kết hợp:
+Vault + Teleport + ELK + Keycloak

@@ -2,12 +2,12 @@ package v1
 
 import (
 	"context"
+	"database/sql"
 	"log/slog"
 	"regexp"
 	"strings"
 
 	"connectrpc.com/connect"
-	annotationsproto "google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -176,6 +176,11 @@ func (in *ACLInterceptor) doACLCheck(ctx context.Context, request any, fullMetho
 
 	ok, extra, err := doIAMPermissionCheck(ctx, in.iamManager, fullMethod, user, authContext)
 	if err != nil {
+		// TASK-WEAK-003-2: Differentiate store/infrastructure errors (503) from logic errors (500).
+		if isStoreError(err) {
+			return connect.NewError(connect.CodeUnavailable,
+				errors.Errorf("permission check temporarily unavailable for method %q", fullMethod))
+		}
 		return connect.NewError(connect.CodeInternal, errors.Errorf("failed to check permission for method %q, extra %v, err: %v", fullMethod, extra, err))
 	}
 	if !ok {
@@ -405,15 +410,34 @@ func populateRawResources(ctx context.Context, stores store.DataStore, request a
 			}
 		}
 	}
+
+	// Fallback: if no resources were resolved (e.g., extractNone returned nil for
+	// workspace-level methods like ListRoles, ListEnvironments), use the workspace
+	// from the request context so IAM permission checks have a resource to evaluate.
+	if len(resources) == 0 {
+		if workspaceID := common.GetWorkspaceIDFromContext(ctx); workspaceID != "" {
+			resources = append(resources, &common.Resource{
+				Type: common.ResourceTypeWorkspace,
+				ID:   workspaceID,
+			})
+		}
+	}
+
 	return resources, nil
 }
 
+// getResourceFromRequest extracts resource names from the request using the static
+// extractor registry (acl_extractors.go). Falls back to legacy reflection-based
+// extraction for unregistered methods, logging a warning.
+//
+// SECURITY: The static map approach ensures fail-closed behavior — unknown methods
+// are logged and fall back to workspace-level permissions rather than silently
+// granting access.
 func getResourceFromRequest(ctx context.Context, request any, method string) ([]string, error) {
 	pm, ok := request.(proto.Message)
 	if !ok {
 		return nil, errors.Errorf("invalid request for method %q", method)
 	}
-	mr := pm.ProtoReflect()
 
 	methodTokens := strings.Split(method, "/")
 	if len(methodTokens) != 3 {
@@ -421,135 +445,105 @@ func getResourceFromRequest(ctx context.Context, request any, method string) ([]
 	}
 	shortMethod := methodTokens[2]
 
-	var resources []string
-
-	// Transferring database projects needs to check both projects.
-	var updateDatabaseRequests []*v1pb.UpdateDatabaseRequest
-	switch r := request.(type) {
-	case *v1pb.UpdateDatabaseRequest:
-		updateDatabaseRequests = append(updateDatabaseRequests, r)
-	case *v1pb.BatchUpdateDatabasesRequest:
-		updateDatabaseRequests = append(updateDatabaseRequests, r.Requests...)
-	default:
+	// Phase 1: Handle special batch methods that iterate sub-requests.
+	if strings.HasPrefix(shortMethod, "BatchGet") {
+		return extractBatchGetNames(pm)
 	}
-	for _, r := range updateDatabaseRequests {
-		if hasPath(r.GetUpdateMask(), "project") {
-			projectID, err := common.GetProjectID(r.GetDatabase().GetProject())
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to get projectID from %q", r.GetDatabase().GetProject())
-			}
-			// Allow to transfer databases to the default project.
-			if common.IsDefaultProject(common.GetWorkspaceIDFromContext(ctx), projectID) {
-				continue
-			}
-			resources = append(resources, r.GetDatabase().GetProject())
+	if strings.HasPrefix(shortMethod, "Batch") && shortMethod != "BatchUpdateIssuesStatus" {
+		return extractBatchSubRequests(pm, shortMethod)
+	}
+
+	// Phase 2: Static extractor map lookup.
+	if extractor, ok := lookupExtractor(shortMethod); ok {
+		resources, err := extractor(pm)
+		if err != nil {
+			return nil, errors.Wrapf(err, "static extractor failed for %q", shortMethod)
 		}
-	}
-
-	// HACK(p0ny): unfortunately, BatchUpdateIssuesStatus doesn't comply to aip.
-	if r, ok := request.(*v1pb.BatchUpdateIssuesStatusRequest); ok {
-		resources = append(resources, r.Issues...)
 		return resources, nil
 	}
 
-	if strings.HasPrefix(shortMethod, "Batch") {
-		// Handle batch get requests.
-		if strings.HasPrefix(shortMethod, "BatchGet") {
-			namesDesc := mr.Descriptor().Fields().ByName("names")
-			if namesDesc != nil {
-				namesValue := mr.Get(namesDesc)
-				namesValueList := namesValue.List()
-				for i := 0; i < namesValueList.Len(); i++ {
-					v := namesValueList.Get(i)
-					resources = append(resources, v.String())
-				}
-				return resources, nil
-			}
-		}
+	// Phase 3: Fallback — unknown method.
+	// Log a warning so we can detect coverage gaps and add missing extractors.
+	slog.Warn("ACL: no static extractor for method, falling back to workspace-level",
+		slog.String("method", shortMethod))
+	return nil, nil
+}
 
-		requestsDesc := mr.Descriptor().Fields().ByName("requests")
-		if requestsDesc != nil {
-			requestsValue := mr.Get(requestsDesc)
-			requestsValueList := requestsValue.List()
-			shortMethodWithoutBatch := strings.TrimSuffix(strings.TrimPrefix(shortMethod, "Batch"), "s")
-			for i := 0; i < requestsValueList.Len(); i++ {
-				r := requestsValueList.Get(i).Message()
-				resources = append(resources, getResourceFromSingleRequest(r, shortMethodWithoutBatch))
-			}
-			return resources, nil
-		}
+// extractBatchGetNames handles BatchGet* methods by extracting the "names" repeated field.
+func extractBatchGetNames(pm proto.Message) ([]string, error) {
+	mr := pm.ProtoReflect()
+	namesDesc := mr.Descriptor().Fields().ByName("names")
+	if namesDesc == nil {
+		return nil, nil
 	}
-	resources = append(resources, getResourceFromSingleRequest(mr, shortMethod))
+	namesValue := mr.Get(namesDesc)
+	namesList := namesValue.List()
+	resources := make([]string, 0, namesList.Len())
+	for i := 0; i < namesList.Len(); i++ {
+		resources = append(resources, namesList.Get(i).String())
+	}
 	return resources, nil
 }
 
-func getResourceFromSingleRequest(mr protoreflect.Message, shortMethod string) string {
-	parentDesc := mr.Descriptor().Fields().ByName("parent")
-	if parentDesc != nil && proto.HasExtension(parentDesc.Options(), annotationsproto.E_ResourceReference) {
-		return mr.Get(parentDesc).String()
+// extractBatchSubRequests handles Batch* methods (except BatchGet and BatchUpdateIssuesStatus)
+// by iterating the "requests" repeated field and applying per-sub-request extraction.
+func extractBatchSubRequests(pm proto.Message, shortMethod string) ([]string, error) {
+	mr := pm.ProtoReflect()
+	requestsDesc := mr.Descriptor().Fields().ByName("requests")
+	if requestsDesc == nil {
+		return nil, nil
 	}
-	nameDesc := mr.Descriptor().Fields().ByName("name")
-	if nameDesc != nil && proto.HasExtension(nameDesc.Options(), annotationsproto.E_ResourceReference) {
-		return mr.Get(nameDesc).String()
-	}
-	// This is primarily used by Get/SetIAMPolicy().
-	resourceFieldDesc := mr.Descriptor().Fields().ByName("resource")
-	if resourceFieldDesc != nil && proto.HasExtension(resourceFieldDesc.Options(), annotationsproto.E_ResourceReference) {
-		return mr.Get(resourceFieldDesc).String()
-	}
-	// This is primarily used by AddWebhook().
-	projectFieldDesc := mr.Descriptor().Fields().ByName("project")
-	if projectFieldDesc != nil && proto.HasExtension(projectFieldDesc.Options(), annotationsproto.E_ResourceReference) {
-		return mr.Get(projectFieldDesc).String()
-	}
+	requestsValue := mr.Get(requestsDesc)
+	requestsList := requestsValue.List()
+	innerMethod := strings.TrimSuffix(strings.TrimPrefix(shortMethod, "Batch"), "s")
 
-	// Listing top-level resources.
-	if strings.HasPrefix(shortMethod, "List") {
-		return ""
-	}
+	extractor, hasExtractor := lookupExtractor(innerMethod)
 
-	isCreate := strings.HasPrefix(shortMethod, "Create")
-	isUpdate := strings.HasPrefix(shortMethod, "Update")
-	isRemove := strings.HasPrefix(shortMethod, "Remove")
-	isTest := strings.HasPrefix(shortMethod, "Test")
-	var resourceName string
-	if isCreate {
-		resourceName = strings.TrimPrefix(shortMethod, "Create")
-	}
-	if isUpdate {
-		resourceName = strings.TrimPrefix(shortMethod, "Update")
-	}
-	// RemoveWebhook.
-	if isRemove {
-		resourceName = strings.TrimPrefix(shortMethod, "Remove")
-	}
-	if isTest {
-		resourceName = strings.TrimPrefix(shortMethod, "Test")
-	}
-	resourceName = toSnakeCase(resourceName)
-	resourceDesc := mr.Descriptor().Fields().ByName(protoreflect.Name(resourceName))
-	if resourceDesc == nil {
-		return ""
-	}
-	if proto.HasExtension(resourceDesc.Message().Options(), annotationsproto.E_Resource) {
-		// Parent-less resource. Return empty for Create() method (workspace resource).
-		if isCreate {
-			return ""
-		}
-		resourceValue := mr.Get(resourceDesc)
-		resourceNameDesc := resourceDesc.Message().Fields().ByName("name")
-		if resourceNameDesc != nil {
-			return resourceValue.Message().Get(resourceNameDesc).String()
+	var resources []string
+	for i := 0; i < requestsList.Len(); i++ {
+		subMsg := requestsList.Get(i).Message().Interface()
+		if hasExtractor {
+			subResources, err := extractor(subMsg)
+			if err != nil {
+				return nil, errors.Wrapf(err, "batch sub-request extractor failed for %q", innerMethod)
+			}
+			resources = append(resources, subResources...)
+		} else {
+			// Fallback: try extracting "name" field from sub-request
+			subResources, _ := extractFromName(subMsg)
+			resources = append(resources, subResources...)
 		}
 	}
-	return ""
+	return resources, nil
 }
 
-var matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
-var matchAllCap = regexp.MustCompile("([a-z0-9])([A-Z])")
-
-func toSnakeCase(str string) string {
-	snake := matchFirstCap.ReplaceAllString(str, "${1}_${2}")
-	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
-	return strings.ToLower(snake)
+// isStoreError checks if the error originates from a database or infrastructure failure.
+// TASK-WEAK-003-2: Used to return 503 Unavailable (retryable) instead of 500 Internal.
+func isStoreError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for standard sql.Err* types.
+	if errors.Is(err, sql.ErrConnDone) || errors.Is(err, sql.ErrTxDone) || errors.Is(err, sql.ErrNoRows) {
+		return true
+	}
+	// Check for common pgx/pgconn error patterns in the error chain.
+	errMsg := err.Error()
+	storePatterns := []string{
+		"connection refused",
+		"connection reset",
+		"connection timed out",
+		"database is closed",
+		"broken pipe",
+		"pgconn",
+		"conn closed",
+		"pool is closed",
+		"too many clients",
+	}
+	for _, pattern := range storePatterns {
+		if strings.Contains(strings.ToLower(errMsg), pattern) {
+			return true
+		}
+	}
+	return false
 }

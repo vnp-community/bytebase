@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PagedTableFooter } from "@/react/hooks/usePagedData";
 import {

@@ -41,8 +41,15 @@ Config: `PG_READ_REPLICA_URL` env var, `REPLICA_LAG_THRESHOLD` (default 5s)
 
 ## Acceptance Criteria
 
-- [ ] No replica URL → `ForRead()` returns primary
-- [ ] Replica available + lag OK → `ForRead()` returns replica
-- [ ] Replica lag exceeds threshold → `ForRead()` falls back to primary
-- [ ] Replica connection failure → graceful fallback + warning log
-- [ ] Lag monitoring goroutine with proper context cancellation
+- [x] No replica URL → `ForRead()` returns primary
+- [x] Replica available + lag OK → `ForRead()` returns replica
+- [x] Replica lag exceeds threshold → `ForRead()` falls back to primary
+- [x] Replica connection failure → graceful fallback + warning log
+- [x] Lag monitoring goroutine with proper context cancellation
+
+## Status: ✅ DONE
+
+- **Completed**: 2026-05-10
+- **Files**: `backend/store/read_replica_pool.go`, `backend/store/read_replica_pool_test.go`
+- **Notes**: `ReadReplicaPool` uses `atomic.Int64` for lag tracking (microsecond precision). Lag monitor queries `pg_last_xact_replay_timestamp()` every 5s. Default threshold 5s. Prometheus gauge `bytebase_db_replica_lag_seconds` exported. All 6 unit tests pass. Config via `PG_READ_REPLICA_URL` and `REPLICA_LAG_THRESHOLD` env vars.
+

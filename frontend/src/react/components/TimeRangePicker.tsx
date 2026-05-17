@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import dayjs from "dayjs";
 import { ArrowRight, Calendar } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

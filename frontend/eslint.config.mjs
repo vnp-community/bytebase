@@ -1,6 +1,12 @@
 import vueI18n from "@intlify/eslint-plugin-vue-i18n";
 import vueTsEslintConfig from "@vue/eslint-config-typescript";
 import pluginVue from "eslint-plugin-vue";
+import { noProtoConstructor } from "./eslint-rules/no-proto-constructor.mjs";
+import { noFetchForGrpc } from "./eslint-rules/no-fetch-for-grpc.mjs";
+import { requireUpdateMask } from "./eslint-rules/require-update-mask.mjs";
+import { reactPageNamedExport } from "./eslint-rules/react-page-named-export.mjs";
+import { correctI18nSystem } from "./eslint-rules/correct-i18n-system.mjs";
+import { maxComponentLines } from "./eslint-rules/max-component-lines.mjs";
 
 export default [
   ...pluginVue.configs["flat/essential"],
@@ -89,4 +95,58 @@ export default [
       "@intlify/vue-i18n/no-missing-keys": "off",
     },
   },
+  // Bytebase AI guardrail rules — prevent top AI coding mistakes
+  {
+    plugins: {
+      "bytebase-ai": {
+        rules: {
+          "no-proto-constructor": noProtoConstructor,
+          "no-fetch-for-grpc": noFetchForGrpc,
+          "require-update-mask": requireUpdateMask,
+          "correct-i18n-system": correctI18nSystem,
+        },
+      },
+    },
+    rules: {
+      "bytebase-ai/no-proto-constructor": "error",
+      "bytebase-ai/no-fetch-for-grpc": "error",
+      "bytebase-ai/require-update-mask": "warn",
+      "bytebase-ai/correct-i18n-system": "error",
+    },
+  },
+  // Named export enforcement for React page files only
+  {
+    files: ["src/react/pages/**/*.tsx"],
+    ignores: ["**/*.test.*"],
+    plugins: {
+      "bytebase-pages": {
+        rules: {
+          "react-page-named-export": reactPageNamedExport,
+        },
+      },
+    },
+    rules: {
+      "bytebase-pages/react-page-named-export": "error",
+    },
+  },
+  // Max component size enforcement — prevents future god components
+  {
+    files: ["src/react/**/*.tsx"],
+    ignores: ["**/*.test.*", "src/react/templates/**"],
+    plugins: {
+      "bytebase-size": {
+        rules: {
+          "max-component-lines": maxComponentLines,
+        },
+      },
+    },
+    rules: {
+      "bytebase-size/max-component-lines": ["warn", { max: 500 }],
+    },
+  },
+  // Exclude template files from lint (they contain placeholder code)
+  {
+    ignores: ["src/react/templates/**"],
+  },
 ];
+

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import type * as monaco from "monaco-editor";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MonacoModule } from "@/components/MonacoEditor";

@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <!-- This div is used to insulate it from outside element to prevent resizing the BBAvatar -->
   <div>

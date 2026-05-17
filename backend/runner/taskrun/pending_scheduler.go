@@ -55,7 +55,7 @@ func (s *Scheduler) runPendingTaskRunsScheduler(ctx context.Context, wg *sync.Wa
 
 func (s *Scheduler) schedulePendingTaskRuns(ctx context.Context) (err error) {
 	startedAt := time.Now()
-	tx, err := s.store.GetDB().BeginTx(ctx, nil)
+	tx, err := s.store.GetRunnerDB().BeginTx(ctx, nil)
 	if err != nil {
 		return errors.Wrapf(err, "failed to begin pending scheduler transaction")
 	}

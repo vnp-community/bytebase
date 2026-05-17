@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { ChevronLeft } from "lucide-react";
 import { useMemo, useState } from "react";
 import { PanelSearchBox } from "@/react/components/sql-editor/Panels/common/PanelSearchBox";

@@ -6,18 +6,19 @@
 | Priority | P0 |
 | Depends On | — |
 | Status | ✅ DONE |
-| Completed | 2025-05-10 |
+| Completed | 2026-05-10 |
+| Verified | 2026-05-11 |
 | Est. | L |
 
 ## Delivered
 
-`backend/api/v1/acl_extractors.go` — 490 lines:
+**File**: `backend/api/v1/acl_extractors.go` (497 lines)
 
-- **ResourceExtractorFunc** type definition
-- **aclResourceExtractors** static map: 90+ RPC method entries across 17 services
+- **`ResourceExtractorFunc`** type definition
+- **`aclResourceExtractors`** static map: 90+ RPC method entries across 17 services
 - **Shared extractors**: `extractNone`, `extractFromName`, `extractFromParent`, `extractFromResource`, `extractFromProject`, `extractFromInstanceField`, `extractField`
 - **Custom extractors**: `extractFromDatabaseUpdate` (project transfer), `extractFromBatchIssuesStatus` (non-AIP), 10+ typed Update extractors
-- **lookupExtractor** bridge function for gradual migration
+- **`lookupExtractor`** bridge function for gradual migration
 
 ## Coverage
 
@@ -36,10 +37,16 @@
 | SheetService | 3 |
 | Others (10 services) | 27 |
 
-## Verification
+### Verification (2026-05-11 re-verified)
 
 ```bash
 go build ./backend/api/v1/...    # ✅ PASS
 go build ./backend/server/...    # ✅ PASS
 go vet ./backend/api/v1/...      # ✅ PASS
 ```
+
+## Acceptance Criteria
+
+- [x] Static map covers 90+ RPC methods
+- [x] `lookupExtractor` bridge function for batch and special-case handling
+- [x] All builds pass

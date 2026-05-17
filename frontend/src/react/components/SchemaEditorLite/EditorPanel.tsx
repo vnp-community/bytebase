@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useCallback, useState } from "react";
 import { useSchemaEditorContext } from "./context";
 import { DatabaseEditor } from "./Panels/DatabaseEditor";

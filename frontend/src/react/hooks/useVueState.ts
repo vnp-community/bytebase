@@ -5,14 +5,11 @@ export interface UseVueStateOptions {
   /**
    * Track deep mutations of returned reactive objects.
    *
-   * Default `false` (shallow) — Vue's `watch` only fires when properties
-   * read by the getter change reference. Pinia stores typically mutate
-   * fields in place via `Object.assign(tab, payload)`, so a getter like
-   * `() => [...tabStore.openTabList]` tracks the array + each item
-   * reference but NOT each item's nested fields. Set `deep: true` for
-   * collection getters where consumers care about field-level changes
-   * (e.g. tab connection / status updates that don't reseat the tab
-   * reference).
+   * Default `true` (deep) — Vue's `watch` fires on nested property changes,
+   * which is needed for Pinia stores that mutate fields in place via
+   * `Object.assign(tab, payload)`. Set `deep: false` to opt out for
+   * performance-sensitive getters where only top-level reference changes
+   * matter.
    */
   readonly deep?: boolean;
 }
@@ -44,7 +41,7 @@ export function useVueState<T>(
 
   // Capture `deep` once per mount; flipping it post-mount would require
   // tearing down + re-subscribing the watch and isn't a real use case.
-  const deepRef = useRef(!!options?.deep);
+  const deepRef = useRef(options?.deep ?? true);
 
   const subscribe = useCallback((onStoreChange: () => void) => {
     const stop = watch(

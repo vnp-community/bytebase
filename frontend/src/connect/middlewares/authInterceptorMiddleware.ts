@@ -7,6 +7,12 @@ import { PermissionDeniedDetailSchema } from "@/types/proto-es/v1/common_pb";
 import { ignoredCodesContextKey, silentContextKey } from "../context-key";
 import { refreshTokens } from "../refreshToken";
 
+const SAFE_TO_RETRY_PREFIXES = ["Get", "List", "Search", "Batch", "Check"];
+
+function isSafeToRetry(methodName: string): boolean {
+  return SAFE_TO_RETRY_PREFIXES.some((prefix) => methodName.startsWith(prefix));
+}
+
 const extractPermissionDeniedDetail = (error: unknown) => {
   if (error instanceof ConnectError) {
     const details = error.findDetails(PermissionDeniedDetailSchema);
@@ -71,20 +77,24 @@ export const authInterceptor: Interceptor = (next) => async (req) => {
           throw error;
         }
 
-        try {
-          return await next(req);
-        } catch (retryError) {
-          if (
-            retryError instanceof ConnectError &&
-            retryError.code === Code.Unauthenticated
-          ) {
-            handleUnauthenticatedFailure({
-              silent,
-              isLoggedIn: authStore.isLoggedIn,
-            });
+        if (isSafeToRetry(req.method.name)) {
+          try {
+            return await next(req);
+          } catch (retryError) {
+            if (
+              retryError instanceof ConnectError &&
+              retryError.code === Code.Unauthenticated
+            ) {
+              handleUnauthenticatedFailure({
+                silent,
+                isLoggedIn: authStore.isLoggedIn,
+              });
+            }
+            throw retryError;
           }
-          throw retryError;
         }
+        // Mutations: refresh succeeded but don't retry — throw original error
+        throw error;
       }
 
       if (

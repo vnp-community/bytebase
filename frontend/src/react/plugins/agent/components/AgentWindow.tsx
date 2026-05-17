@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Archive, EllipsisVertical, Plus, Trash2, Undo2 } from "lucide-react";
 import {
   type ReactNode,

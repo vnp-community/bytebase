@@ -56,13 +56,32 @@ main.go
        │     ├─ oauth2.NewService()
        │     ├─ mcp.NewServer()
        │     └─ stripeapi.NewWebhookHandler()
-       ├─ 11. configureGrpcRouters() → 30+ ConnectRPC services
+       ├─ 11. [DUAL MODE] Route Configuration:
+       │     ├─ [BB_USE_GATEWAY=true] Gateway Mode:
+       │     │   ├─ initGatewayServices() → DCM + SQL + Admin + Runner services
+       │     │   ├─ registry.StartAll() → Start bufconn HTTP servers
+       │     │   └─ configureGatewayRouters() → Reverse proxy routing
+       │     └─ [default] Legacy Mode:
+       │         └─ configureGrpcRouters() → Monolithic 31-handler registration
        └─ 12. configureEchoRouters() → HTTP middleware + protocol routes
 
   └─ Server.Run(ctx, port)
-       ├─ Start 8 background goroutines (via runnerWG)
+       ├─ [BB_USE_GATEWAY=true]: runnerService.Run(ctx)
+       ├─ [HA mode]: Leader-elected runners + shared runners
+       ├─ [default]: Start 8+ background goroutines (via runnerWG)
        ├─ net.Listen("tcp", :port)
        └─ httpServer.Serve() [H2C handler]
+
+  └─ Server.Shutdown(ctx)
+       ├─ heartbeat.SetStatus("DRAINING") + SendHeartbeat
+       ├─ httpServer.Shutdown() → drain connections
+       ├─ cancel() → signal runners
+       ├─ [BB_USE_GATEWAY=true]: runnerService.Wait() + registry.StopAll()
+       ├─ [default]: runnerWG.Wait()
+       ├─ heartbeat.SetStatus("STOPPED") + SendHeartbeat
+       ├─ poolManager.Close()
+       ├─ store.Close()
+       └─ stopper() → embedded PG cleanup
 ```
 
 ---
@@ -544,4 +563,65 @@ Server Start → migrator.MigrateSchema()
 
 ---
 
-> **Document generated**: 2026-05-08 — Based on deep source code analysis of Bytebase repository.
+## 12. Service Architecture Design (Gateway + Services)
+
+### 12.1 Design Rationale
+
+The monolithic `grpc_routes.go` (420 lines) and runner management scattered across `server.go` creates tight coupling. The Gateway + Services architecture decomposes this into isolated domain services while keeping the single-binary deployment model.
+
+### 12.2 Key Interfaces
+
+```go
+// DomainService — lifecycle interface for all domain services.
+type DomainService interface {
+    Name() string
+    Start(ctx context.Context) error
+    Stop(ctx context.Context) error
+    Listener() net.Listener      // bufconn for single-binary
+    HTTPClient() *http.Client    // pre-configured for bufconn
+    Healthy(ctx context.Context) error
+}
+
+// RunnerService — manages all background runners.
+type RunnerService interface {
+    Run(ctx context.Context)     // Start all runners (non-blocking)
+    Wait()                       // Block until all finish
+}
+
+// Registry — service lifecycle management.
+type Registry struct {
+    services map[string]DomainService
+    runner   RunnerService
+}
+```
+
+### 12.3 Communication Patterns
+
+| From → To | Method | Notes |
+|-----------|--------|-------|
+| Gateway → Domain Service | bufconn HTTP (ReverseProxy) | In-memory, zero network overhead |
+| Service → Store | Direct Go call | Same process, same store instance |
+| Service → Service | **Forbidden** | Architecture boundary test enforced |
+| Runner → EventBus | Go channels / NATS | Async notifications |
+| Frontend → Gateway | TCP HTTP/2 (H2C) | External boundary |
+
+### 12.4 Dual-Mode Operation
+
+| Feature | Legacy Mode (default) | Gateway Mode (`BB_USE_GATEWAY=true`) |
+|---------|----------------------|--------------------------------------|
+| Router | `configureGrpcRouters()` | `configureGatewayRouters()` |
+| Service creation | Inline in grpc_routes.go | `initGatewayServices()` |
+| Runner lifecycle | `runnerWG` + manual goroutines | `RunnerService.Run()` / `Wait()` |
+| Shutdown | `runnerWG.Wait()` | `runnerService.Wait()` + `registry.StopAll()` |
+| Interceptors | Inline | `gateway.BuildInterceptorChain()` |
+
+### 12.5 Architecture Decision Records
+
+1. **Feature flag rollout** — Gateway mode is behind `BB_USE_GATEWAY` to allow safe A/B testing and instant rollback
+2. **No cross-service imports** — Enforced by `architecture_test.go`; services only share `store`, `component/`, and `api/v1/`
+3. **bufconn over gRPC** — Using HTTP + bufconn instead of direct gRPC for maximum flexibility with REST/Connect/gRPC protocols
+4. **Same interceptor chain** — `BuildInterceptorChain()` guarantees identical auth/ACL/audit behavior
+
+---
+
+> **Document generated**: 2026-05-08 — Updated 2026-05-15 with Gateway + Services architecture.

@@ -1,8 +1,10 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <NConfigProvider
     :locale="generalLang"
     :date-locale="dateLang"
     :theme-overrides="themeOverrides"
+    :csp="cspConfig"
   >
     <Watermark />
 
@@ -25,7 +27,6 @@
 
 <script lang="ts" setup>
 import { Code, ConnectError } from "@connectrpc/connect";
-import { cloneDeep, isEqual } from "lodash-es";
 import {
   NConfigProvider,
   NDialogProvider,
@@ -37,6 +38,7 @@ import {
   onUnmounted,
   watch,
   watchEffect,
+  nextTick,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import Watermark from "@/components/misc/Watermark.vue";
@@ -52,24 +54,28 @@ import {
 } from "./react/shell-bridge";
 import { useNotificationStore, useUIStateStore } from "./store";
 import { isDev, setDocumentTitle } from "./utils";
+import { localeManager } from "./localeManager";
 
 // Show at most 3 notifications to prevent excessive notification when shit hits the fan.
 const MAX_NOTIFICATION_DISPLAY_COUNT = 3;
+
+// TASK-WEAK-001-3: Read CSP nonce from meta tag injected by backend.
+// When CSP nonce is enabled, Naive UI uses this nonce for dynamically injected styles.
+const cspNonce =
+  document
+    .querySelector('meta[name="csp-nonce"]')
+    ?.getAttribute("content") || "";
+const cspConfig =
+  cspNonce && cspNonce !== "CSP_NONCE_PLACEHOLDER"
+    ? { nonce: cspNonce }
+    : undefined;
 
 const route = useRoute();
 const router = useRouter();
 const notificationStore = useNotificationStore();
 const uiStateStore = useUIStateStore();
 
-const handleReactLocaleChange = (event: Event) => {
-  const lang = (event as CustomEvent<unknown>).detail;
-  if (typeof lang === "string") {
-    locale.value = lang;
-    if (route.meta.title) {
-      setDocumentTitle(route.meta.title(route));
-    }
-  }
-};
+let unsubscribeLocale: (() => void) | undefined;
 
 const handleReactQuickstartReset = (event: Event) => {
   const keys = (event as CustomEvent<ReactQuickstartResetDetail>).detail?.keys;
@@ -88,26 +94,47 @@ const handleReactQuickstartReset = (event: Event) => {
   );
 };
 
+const handleOAuthUnknown = () => {
+  notificationStore.pushNotification({
+    module: "bytebase",
+    style: "CRITICAL",
+    title: t("oauth.unknown-event"),
+  });
+};
+
+function handleUnhandledRejection(event: PromiseRejectionEvent) {
+  if (event.reason instanceof ConnectError) return; // Already handled
+  console.error("[Unhandled Rejection]", event.reason);
+  notificationStore.pushNotification({
+    module: "bytebase",
+    style: "CRITICAL",
+    title: "Unexpected error",
+    description: isDev() ? String(event.reason) : undefined,
+  });
+}
+
 onMounted(() => {
-  window.addEventListener(
-    ReactShellBridgeEvent.localeChange,
-    handleReactLocaleChange
-  );
+  unsubscribeLocale = localeManager.subscribe(() => {
+    if (route.meta.title) {
+      setDocumentTitle(route.meta.title(route));
+    }
+  });
   window.addEventListener(
     ReactShellBridgeEvent.quickstartReset,
     handleReactQuickstartReset
   );
+  window.addEventListener("bb.oauth.unknown", handleOAuthUnknown);
+  window.addEventListener("unhandledrejection", handleUnhandledRejection);
 });
 
 onUnmounted(() => {
-  window.removeEventListener(
-    ReactShellBridgeEvent.localeChange,
-    handleReactLocaleChange
-  );
+  if (unsubscribeLocale) unsubscribeLocale();
   window.removeEventListener(
     ReactShellBridgeEvent.quickstartReset,
     handleReactQuickstartReset
   );
+  window.removeEventListener("bb.oauth.unknown", handleOAuthUnknown);
+  window.removeEventListener("unhandledrejection", handleUnhandledRejection);
 });
 
 watchEffect(async () => {
@@ -115,12 +142,17 @@ watchEffect(async () => {
   overrideAppProfile();
 });
 
+// Only these codes are explicitly handled by interceptors
+const INTERCEPTOR_HANDLED_CODES = [
+  Code.Unauthenticated,   // authInterceptor → SessionExpiredSurface
+  Code.PermissionDenied,   // authInterceptor → 403 page
+  Code.Canceled,           // explicit aborts
+];
+
 onErrorCaptured((error: unknown /* , _, info */) => {
-  if (
-    error instanceof ConnectError &&
-    Object.values(Code).includes(error.code)
-  ) {
-    return;
+  if (error instanceof ConnectError) {
+    if (INTERCEPTOR_HANDLED_CODES.includes(error.code)) return;
+    console.error("[App] Unhandled ConnectError:", error.code, error.message);
   }
 
   const err = error as { response?: unknown; stack?: string };
@@ -132,39 +164,25 @@ onErrorCaptured((error: unknown /* , _, info */) => {
       description: isDev() ? err.stack : undefined,
     });
   }
-  return true;
+  return false;
 });
 
-// event listener for "bb.oauth.event.unknown"
-// this event would be posted when an unknown state is returned by OAuth provider.
-// Add it here so the notification is displayed on the main window. The OAuth callback window is short lived
-// and would close before the notification has a chance to be displayed.
-window.addEventListener("bb.oauth.unknown", () => {
-  notificationStore.pushNotification({
-    module: "bytebase",
-    style: "CRITICAL",
-    title: t("oauth.unknown-event"),
-  });
-});
-
+// TASK-W-028: Shallow field check replaces cloneDeep + isEqual for query preservation.
 // Preserve specific query fields when navigating between pages.
 watch(route, (current, prev) => {
-  // fields is the list of query fields that we want to preserve.
-  const fields = ["mode", "customTheme", "lang", "project", "filter"];
-  const preservedQuery = cloneDeep(current.query);
-  for (const key of fields) {
-    if (preservedQuery[key] === undefined) {
-      preservedQuery[key] = prev.query[key];
+  const preservable = current.meta.preserveQuery as string[] | undefined;
+  if (!preservable || preservable.length === 0) return;
+  let needsUpdate = false;
+  const updates: Record<string, string> = {};
+  for (const field of preservable) {
+    if (!(field in current.query) && prev.query[field]) {
+      updates[field] = prev.query[field] as string;
+      needsUpdate = true;
     }
   }
-  // If the query is the same, we don't need to update the route.
-  if (isEqual(current.query, preservedQuery)) {
-    return;
-  }
-  // Otherwise, replace current route with the preserved query.
-  router.replace({
-    ...current,
-    query: preservedQuery,
+  if (!needsUpdate) return;
+  nextTick(() => {
+    router.replace({ ...current, query: { ...current.query, ...updates } });
   });
-});
+}, { flush: "post" });
 </script>

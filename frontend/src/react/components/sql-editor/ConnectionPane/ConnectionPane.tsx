@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { cloneDeep } from "lodash-es";
 import { ChevronDown, ChevronRight, Info, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -27,17 +28,15 @@ import { cn } from "@/react/lib/utils";
 import {
   featureToRef,
   pushNotification,
-  useCurrentUserV1,
   useDatabaseV1Store,
   useDBGroupStore,
-  useEnvironmentV1Store,
   useInstanceV1Store,
-  useProjectV1Store,
   useSQLEditorStore,
   useSQLEditorTabStore,
   useSQLEditorTreeStore,
   useSQLEditorUIStore,
 } from "@/store";
+import { useCurrentUser, useEnvironmentList, usePlanFeature, useProject } from "@/react/hooks/useAppState";
 import { instanceNamePrefix } from "@/store/modules/v1/common";
 import type { DatabaseFilter } from "@/store/modules/v1/database";
 import type {
@@ -143,29 +142,25 @@ function ConnectionPaneInner({ show, onMissingFeature }: Props) {
   const uiStore = useSQLEditorUIStore();
   const databaseStore = useDatabaseV1Store();
   const dbGroupStore = useDBGroupStore();
-  const environmentStore = useEnvironmentV1Store();
-  const projectStore = useProjectV1Store();
+  const environmentStore = undefined;
+  const projectStore = undefined;
   const instanceStore = useInstanceV1Store();
   const treeStore = useSQLEditorTreeStore();
-  const currentUser = useCurrentUserV1();
+  const currentUser = useCurrentUser();
 
   const supportBatchMode = useVueState(() => tabStore.supportBatchMode);
   const isInBatchMode = useVueState(() => tabStore.isInBatchMode);
   const treeStoreState = useVueState(() => treeStore.state);
   const currentTab = useVueState(() => tabStore.currentTab);
-  const currentUserEmail = useVueState(() => currentUser.value.email);
+  const currentUserEmail = currentUser?.email ?? "";
   const projectName = useVueState(() => editorStore.project);
   const projectContextReady = useVueState(
     () => editorStore.projectContextReady
   );
-  const environmentList = useVueState(() => environmentStore.environmentList);
+  const environmentList = useEnvironmentList();
 
-  const hasBatchQueryFeature = useVueState(
-    () => featureToRef(PlanFeature.FEATURE_BATCH_QUERY).value
-  );
-  const hasDatabaseGroupFeature = useVueState(
-    () => featureToRef(PlanFeature.FEATURE_DATABASE_GROUPS).value
-  );
+  const hasBatchQueryFeature = usePlanFeature(PlanFeature.FEATURE_BATCH_QUERY);
+  const hasDatabaseGroupFeature = usePlanFeature(PlanFeature.FEATURE_DATABASE_GROUPS);
 
   // Paywall triggers go to the parent (lifted out of this subtree so the
   // FeatureModal portal isn't a descendant of the Sheet's portal).
@@ -250,11 +245,8 @@ function ConnectionPaneInner({ show, onMissingFeature }: Props) {
     selectedDatabaseGroupNames.length,
   ]);
 
-  const projectTitle = useVueState(() => {
-    const p = editorStore.project;
-    if (!p) return "";
-    return projectStore.getProjectByName(p).title;
-  });
+  const project = useProject(projectName);
+  const projectTitle = project?.title ?? "";
 
   const scopeOptions = useCommonSearchScopeOptions([
     "instance",

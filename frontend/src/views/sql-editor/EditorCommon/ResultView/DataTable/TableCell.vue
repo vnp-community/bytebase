@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <!-- eslint-disable vue/no-v-html -->
 <template>
   <div

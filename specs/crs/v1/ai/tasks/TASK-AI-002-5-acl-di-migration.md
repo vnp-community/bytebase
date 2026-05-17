@@ -7,6 +7,7 @@
 | Depends On | TASK-AI-002-1 |
 | Status | ✅ DONE |
 | Completed | 2025-05-09 |
+| Verified | 2025-05-10 |
 | Est. | M |
 
 ## Objective
@@ -34,12 +35,15 @@ All 3 are in the `DataStore` interface. No cascading changes needed.
 
 `grpc_routes.go` passes `*store.Store` to `NewACLInterceptor`. Since `*Store` satisfies `DataStore` (verified via compile-time check), no caller changes needed.
 
-## Verification
+## Verification (2025-05-10 re-verified)
 
 ```bash
 go build ./backend/api/v1/...  # ✅ PASS
 go build ./backend/server/...  # ✅ PASS  
 go vet ./backend/api/v1/...    # ✅ PASS
+go test -run TestGetResourceFromRequest  # ✅ PASS
+go test -run TestLookupExtractor         # ✅ PASS
+go test -run TestHasAllowMissing         # ✅ PASS
 ```
 
 ## Acceptance Criteria

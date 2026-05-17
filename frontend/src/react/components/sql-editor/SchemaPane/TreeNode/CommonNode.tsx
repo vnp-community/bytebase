@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import type { ReactNode } from "react";
 import { HighlightLabelText } from "@/react/components/HighlightLabelText";
 import { cn } from "@/react/lib/utils";

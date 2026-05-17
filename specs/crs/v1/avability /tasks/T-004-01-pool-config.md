@@ -93,8 +93,8 @@ slog.Info("Connection pool configured",
 
 ## Acceptance Criteria
 
-- [ ] `PoolConfig` struct with `DefaultPoolConfig()` and `PoolConfigFromEnv()`
-- [ ] Pool settings applied in `Initialize()` after DB connection
-- [ ] Startup log shows pool configuration
-- [ ] No env vars → defaults (50 max, 10 idle, 1h lifetime, 15min idle)
-- [ ] `go build ./backend/store/...` passes
+- [x] `PoolConfig` struct with `DefaultPoolConfig()` and `PoolConfigFromEnv()`
+- [x] Pool settings applied in `Initialize()` after DB connection
+- [x] Startup log shows pool configuration
+- [x] No env vars → defaults (50 max, 10 idle, 1h lifetime, 15min idle)
+- [x] `go build ./backend/store/...` passes

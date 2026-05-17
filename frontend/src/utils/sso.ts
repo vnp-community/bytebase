@@ -13,7 +13,8 @@ function isValidHttpUrl(url: string): boolean {
   try {
     const urlObj = new URL(url);
     return urlObj.protocol === "http:" || urlObj.protocol === "https:";
-  } catch {
+  } catch (e) {
+    console.warn("[isValidHttpUrl] Invalid URL:", url, e);
     return false;
   }
 }

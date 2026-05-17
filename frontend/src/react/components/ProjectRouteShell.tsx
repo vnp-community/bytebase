@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";

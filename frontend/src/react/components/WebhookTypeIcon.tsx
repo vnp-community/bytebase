@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import dingtalkIcon from "@/assets/im/dingtalk.png";
 import discordIcon from "@/assets/im/discord.svg";
 import feishuIcon from "@/assets/im/feishu.webp";

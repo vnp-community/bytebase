@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Trans, useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
 import { applyPlanTitleToQuery } from "@/components/Plan/logic/title";

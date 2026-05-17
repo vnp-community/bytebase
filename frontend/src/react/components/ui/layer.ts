@@ -68,6 +68,10 @@ const ensureRoot = (family: LayerFamily) => {
   return root as HTMLDivElement;
 };
 
+/**
+ * @deprecated Prefer createOverlayPortal() from @/react/lib/overlay.ts
+ * unless you specifically need the container element.
+ */
 export const getLayerRoot = (family: LayerFamily) => ensureRoot(family);
 
 export const usePreserveHigherLayerAccess = (family: LayerFamily) => {

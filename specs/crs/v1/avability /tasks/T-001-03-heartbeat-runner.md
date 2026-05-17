@@ -34,7 +34,7 @@ type Runner struct {
 
 ## Acceptance Criteria
 
-- [ ] Runner sends full `ReplicaNode` metadata (version, capabilities, endpoint)
-- [ ] Marks STOPPED on graceful shutdown
-- [ ] `SetStatus()` and `SendHeartbeat()` exported for `server.go` to call during shutdown
-- [ ] `go build ./backend/runner/heartbeat/...` passes
+- [x] Runner sends full `ReplicaNode` metadata (version, capabilities, endpoint)
+- [x] Marks STOPPED on graceful shutdown
+- [x] `SetStatus()` and `SendHeartbeat()` exported for `server.go` to call during shutdown
+- [x] `go build ./backend/runner/heartbeat/...` passes

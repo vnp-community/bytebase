@@ -6,7 +6,8 @@
 | Priority | P1 |
 | Depends On | — |
 | Status | ✅ DONE |
-| Completed | 2025-05-10 |
+| Completed | 2026-05-10 |
+| Verified | 2026-05-11 |
 | Est. | M |
 
 ## Delivered
@@ -16,13 +17,13 @@
 ### Changes
 - Added `var _ EventBus = (*Bus)(nil)` compile-time check
 - Changed all exported channels to private fields with accessor methods
-- Implemented all 13 EventBus methods:
+- Implemented all 15 EventBus methods:
   - **Send**: `TicklePlanCheck()`, `TickleTaskRun()`, `RequestApprovalCheck()`, `RequestRolloutCreation()`, `RequestPlanCompletionCheck()`
   - **Cancel**: `RegisterTaskRunCancel()`, `CancelTaskRun()`, `DeregisterTaskRunCancel()`, `RegisterPlanCheckCancel()`, `CancelPlanCheck()`, `DeregisterPlanCheckCancel()`
   - **Read**: `PlanCheckChan()`, `TaskRunChan()`, `ApprovalChan()`, `RolloutCreationChan()`, `PlanCompletionChan()`
 - Non-blocking sends with `select { case ch <- msg: default: }` pattern
 
-## Verification
+## Verification (2026-05-11 re-verified)
 
 ```bash
 go build ./backend/component/bus/...    # ✅ PASS
@@ -30,3 +31,5 @@ go build ./backend/runner/...           # ✅ PASS
 go build ./backend/api/v1/...           # ✅ PASS
 go vet ./backend/component/bus/... ./backend/runner/... ./backend/api/v1/...  # ✅ PASS
 ```
+
+> **Note**: This file is a duplicate of `TASK-AI-005-2-bus-implementation.md` covering the same implementation.

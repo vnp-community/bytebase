@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { RefreshCcw } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";

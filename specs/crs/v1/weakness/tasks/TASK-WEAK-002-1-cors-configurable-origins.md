@@ -6,6 +6,9 @@
 | Priority | P0 |
 | Depends On | — |
 | Est. | S (~80 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-12 |
+| Notes | Implemented in `cors_audit.go` (combined with TASK-002-2). CORS logic extracted from `echo_routes.go` into `configureCORS()`. Env vars: `CORS_ALLOWED_ORIGINS`, `CORS_MAX_AGE`. Wildcard `*` rejected in production. |
 
 ## Objective
 

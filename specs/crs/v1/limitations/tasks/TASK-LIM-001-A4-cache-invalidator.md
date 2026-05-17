@@ -46,7 +46,14 @@ CREATE TRIGGER trg_cache_inv_principal AFTER INSERT OR UPDATE OR DELETE ON princ
 
 ## Acceptance Criteria
 
-- [ ] Runner starts and listens on `cache_invalidation` channel
-- [ ] INSERT/UPDATE/DELETE on key tables triggers cache invalidation
-- [ ] Reconnects after PG connection drop
-- [ ] Graceful shutdown on context cancellation
+- [x] Runner starts and listens on `cache_invalidation` channel
+- [x] INSERT/UPDATE/DELETE on key tables triggers cache invalidation
+- [x] Reconnects after PG connection drop
+- [x] Graceful shutdown on context cancellation
+
+## Status: ✅ DONE
+
+- **Completed**: 2026-05-10
+- **Files**: `backend/store/cache_invalidator.go`, `backend/migrator/migration/3.18/0002##cache_notify_triggers.sql`
+- **Notes**: Uses same `pgx/stdlib` + `WaitForNotification` pattern as `notifylistener`. SQL migration adds `notify_cache_invalidation()` function and triggers on 6 key tables (principal, instance, db, project, policy, setting). In HA mode, `CacheInvalidator` is wired as a shared runner in `server.go`.
+

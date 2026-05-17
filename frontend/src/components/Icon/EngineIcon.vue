@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <img
     :class="twMerge('h-4 w-auto mx-auto object-contain', customClass)"

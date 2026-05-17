@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useTranslation } from "react-i18next";
 import { Tooltip } from "@/react/components/ui/tooltip";
 import type { TreeNode } from "../schemaTree";

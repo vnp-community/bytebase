@@ -52,40 +52,23 @@ const planHasFeature = (plan: PlanType, feature: PlanFeature): boolean => {
 };
 
 // Helper function to get minimum required plan for a feature
-export const getMinimumRequiredPlan = (feature: PlanFeature): PlanType => {
-  const planOrder = [PlanType.FREE, PlanType.TEAM, PlanType.ENTERPRISE];
-  for (const plan of planOrder) {
-    if (planHasFeature(plan, feature)) {
-      return plan;
-    }
-  }
-  return PlanType.ENTERPRISE;
+export const getMinimumRequiredPlan = (_feature: PlanFeature): PlanType => {
+  // VNP-LIC-001: All features available at FREE level
+  return PlanType.FREE;
 };
 
 // Helper function to check if a feature is available for a plan
-export const hasFeature = (plan: PlanType, feature: PlanFeature): boolean => {
-  return planHasFeature(plan, feature);
+export const hasFeature = (_plan: PlanType, _feature: PlanFeature): boolean => {
+  // VNP-LIC-001: Bypass license check — all features enabled
+  return true;
 };
 
 // Helper function to check instance features
 export const hasInstanceFeature = (
-  plan: PlanType,
-  feature: PlanFeature,
-  instanceActivated = true
+  _plan: PlanType,
+  _feature: PlanFeature,
+  _instanceActivated = true
 ): boolean => {
-  if (!hasFeature(plan, feature)) {
-    return false;
-  }
-
-  // For FREE plan, don't check instance activation
-  if (plan === PlanType.FREE) {
-    return true;
-  }
-
-  // For instance-limited features, check activation
-  if (instanceLimitFeature.has(feature)) {
-    return instanceActivated;
-  }
-
+  // VNP-LIC-001: All instance features enabled regardless of activation
   return true;
 };

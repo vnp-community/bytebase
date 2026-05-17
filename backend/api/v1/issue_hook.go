@@ -23,7 +23,7 @@ func postCreateIssue(
 	stores *store.Store,
 	webhookManager *webhook.Manager,
 	licenseService *enterprise.LicenseService,
-	b *bus.Bus,
+	b bus.EventBus,
 	project *store.ProjectMessage,
 	creatorName string,
 	creatorEmail string,

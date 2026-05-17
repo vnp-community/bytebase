@@ -50,7 +50,7 @@ CREATE INDEX IF NOT EXISTS idx_replica_heartbeat_status ON replica_heartbeat (st
 
 ## Acceptance Criteria
 
-- [ ] `ReplicaNode` struct in `store/model/`
-- [ ] Migration extends `replica_heartbeat` with 6 new columns
-- [ ] `ADD COLUMN IF NOT EXISTS` for idempotent migration
-- [ ] `go build ./backend/store/...` passes
+- [x] `ReplicaNode` struct in `store/model/`
+- [x] Migration extends `replica_heartbeat` with 6 new columns
+- [x] `ADD COLUMN IF NOT EXISTS` for idempotent migration
+- [x] `go build ./backend/store/...` passes

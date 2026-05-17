@@ -17,12 +17,22 @@
 ├─────────────────────────────────────────────────────────────────────┤
 │  L2 — API GATEWAY LAYER                                             │
 │  Echo v5 HTTP Server + ConnectRPC + gRPC-Gateway REST               │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │  Gateway (backend/gateway/) — HTTP Reverse Proxy              │   │
+│  │  Routes to Domain Services via bufconn transport              │   │
+│  │  Feature flag: BB_USE_GATEWAY=true (dual-mode with legacy)    │   │
+│  └──────────────────────────────────────────────────────────────┘   │
 ├─────────────────────────────────────────────────────────────────────┤
 │  L3 — SECURITY LAYER (Interceptor Chain)                            │
-│  Validate → Auth → ACL (IAM) → Audit                               │
+│  Validate → Auth → RateLimit → ACL (IAM) → Audit → Standby        │
 ├─────────────────────────────────────────────────────────────────────┤
-│  L4 — SERVICE LAYER                                                 │
-│  30+ gRPC Service Implementations (backend/api/v1/)                 │
+│  L4 — DOMAIN SERVICE LAYER                                          │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────────┐   │
+│  │  DCM (8)   │ │  SQL (8)   │ │ Admin (15) │ │ Runner Service │   │
+│  │  Plan,Issue│ │ SQL,DB,Inst│ │ Auth,User  │ │ Task,Check,    │   │
+│  │  Rollout.. │ │ Sheet..    │ │ Setting..  │ │ Sync,Approval  │   │
+│  └────────────┘ └────────────┘ └────────────┘ └────────────────┘   │
+│  Transport: bufconn (in-memory HTTP) — backend/transport/           │
 ├─────────────────────────────────────────────────────────────────────┤
 │  L5 — COMPONENT LAYER (Shared Business Logic)                       │
 │  IAM Manager, Webhook, DBFactory, Masker, Sheet, Export, Bus        │
@@ -41,6 +51,7 @@
 ├─────────────────────────────────────────────────────────────────────┤
 │  L10 — INFRASTRUCTURE LAYER                                         │
 │  Embedded PG, Migrator, Config, Telemetry, Logging, Prometheus      │
+│  NATSBus (embedded NATS), OTel, Circuit Breaker, Middleware         │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -515,4 +526,75 @@ L10 (Inf)                                         —
 
 ---
 
-> **Document generated**: 2026-05-08 — Based on source code analysis of Bytebase repository.
+## 12. Gateway + Domain Services Architecture (v2)
+
+### 12.1 Overview
+
+The Bytebase backend has been refactored from a monolithic service layer into a **Gateway + Domain Services** architecture. This is controlled by the `BB_USE_GATEWAY` environment variable and runs within a **single binary**.
+
+### 12.2 Domain Services
+
+| Service | Package | Handlers | Responsibility |
+|---------|---------|----------|----------------|
+| DCM | `backend/service/dcm/` | 8 | Plan, Issue, Rollout, Release, Revision, ReviewConfig, AccessGrant, OrgPolicy |
+| SQL | `backend/service/sqlsvc/` | 8 | SQL, Database, DatabaseCatalog, DatabaseGroup, Instance, InstanceRole, Sheet, Worksheet |
+| Admin | `backend/service/admin/` | 15 | Auth, User, ServiceAccount, WorkloadIdentity, Role, Group, IdP, Setting, Workspace, Project, Subscription, Actuator, AuditLog, Cel, AI |
+| Runner | `backend/service/runner/` | — | All background task orchestration (TaskScheduler, PlanCheck, SchemaSync, Approval, etc.) |
+
+### 12.3 Transport Layer
+
+Services communicate via **bufconn** — an in-memory `net.Listener` that allows HTTP communication without TCP sockets. The `BufconnTransport` (`backend/transport/`) creates a listener and matching `http.Client` for each service.
+
+### 12.4 Gateway
+
+The Gateway (`backend/gateway/`) is an HTTP reverse proxy that:
+1. Routes ConnectRPC requests by service path prefix to the correct domain service proxy
+2. Preserves the REST gateway (`/v1/*`) via gRPC-Gateway
+3. Handles gRPC reflection for all 31 services
+4. Extracts the interceptor chain (`Validate → Auth → RateLimit → ACL → Audit → Standby`)
+
+### 12.5 New Directory Structure
+
+```
+backend/
+├── gateway/              # HTTP reverse proxy + interceptors + routes
+│   ├── gateway.go        # ConnectRPC path routing via bufconn proxies
+│   ├── interceptors.go   # Extracted interceptor chain
+│   └── routes.go         # REST gateway + echo route registration
+├── service/              # Domain service interfaces + implementations
+│   ├── service.go        # DomainService, ServiceRouter, RunnerService interfaces
+│   ├── registry.go       # Service lifecycle management
+│   ├── dcm/              # Change management domain
+│   ├── sqlsvc/           # SQL/Database operations domain
+│   ├── admin/            # Administrative services domain
+│   └── runner/           # Background runner orchestration
+├── transport/            # Transport abstractions
+│   └── bufconn.go        # In-memory HTTP transport
+├── component/            # Shared infrastructure
+│   ├── bus/              # EventBus + NATSBus
+│   ├── otel/             # OpenTelemetry tracing
+│   ├── metrics/          # Prometheus service metrics
+│   ├── middleware/        # Panic recovery, HMAC auth, logging
+│   ├── errors/           # Standardized error types
+│   ├── circuitbreaker/   # Per-service circuit breakers
+│   └── config/           # Service configuration
+├── server/               # Main server (dual-mode: legacy/gateway)
+│   ├── server.go         # Server struct + lifecycle (Run/Shutdown)
+│   ├── gateway_init.go   # Gateway-mode initialization
+│   └── grpc_routes.go    # Legacy monolithic router (fallback)
+└── ...
+```
+
+### 12.6 Feature Flags
+
+| Flag | Default | Purpose |
+|------|---------|---------|
+| `BB_USE_GATEWAY` | `false` | Enable gateway routing mode |
+| `BB_USE_NATS_BUS` | `false` | Use NATS event bus instead of Go channels |
+| `BB_ENABLE_TRACING` | `false` | Enable OpenTelemetry distributed tracing |
+| `BB_ENABLE_CIRCUIT_BREAKER` | `false` | Enable per-service circuit breakers |
+| `BB_INTERNAL_AUTH_ENABLED` | `false` | Enable HMAC auth for internal service calls |
+
+---
+
+> **Document generated**: 2026-05-08 — Updated 2026-05-15 with Gateway + Services architecture.

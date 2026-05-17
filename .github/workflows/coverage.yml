@@ -1,0 +1,40 @@
+name: Coverage Gate
+
+on: [pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Run unit tests with coverage
+        run: |
+          go test -coverprofile=coverage.out -covermode=atomic \
+            ./backend/api/v1/... \
+            ./backend/component/... \
+            ./backend/store/...
+
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | awk '/^total:/ { gsub(/%/,"",$3); print $3 }')
+          echo "Total coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < 50" | bc -l)" -eq 1 ]; then
+            echo "::error::FAIL: coverage ${COVERAGE}% is below the 50% threshold"
+            exit 1
+          fi
+          echo "::notice::Coverage ${COVERAGE}% meets the 50% threshold"
+
+      - uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: coverage.out
+          fail_ci_if_error: false

@@ -9,6 +9,7 @@ import (
 	"github.com/bytebase/bytebase/backend/common/log"
 	"github.com/bytebase/bytebase/backend/component/config"
 	"github.com/bytebase/bytebase/backend/store"
+	"github.com/bytebase/bytebase/backend/store/model"
 )
 
 const (
@@ -19,6 +20,7 @@ const (
 type Runner struct {
 	store   *store.Store
 	profile *config.Profile
+	node    *model.ReplicaNode
 }
 
 // NewRunner creates a new heartbeat runner.
@@ -26,6 +28,14 @@ func NewRunner(store *store.Store, profile *config.Profile) *Runner {
 	return &Runner{
 		store:   store,
 		profile: profile,
+		node: &model.ReplicaNode{
+			ReplicaID:    profile.ReplicaID,
+			EndpointURL:  profile.ExternalURL,
+			Version:      profile.Version,
+			Status:       "STARTING",
+			Capabilities: []string{"API", "RUNNER"}, // Default capabilities
+			Metadata:     "{}",
+		},
 	}
 }
 
@@ -33,26 +43,41 @@ func NewRunner(store *store.Store, profile *config.Profile) *Runner {
 func (r *Runner) Run(ctx context.Context, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	// Mark stale replicas on startup
+	if _, err := r.store.MarkStaleReplicas(ctx, 30*time.Second); err != nil {
+		slog.Error("Failed to mark stale replicas on startup", log.BBError(err))
+	}
+
+	r.SetStatus("READY")
+
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
 
 	slog.Debug("Heartbeat runner started", slog.String("replicaID", r.profile.ReplicaID))
 
 	// Send heartbeat immediately on startup
-	r.sendHeartbeat(ctx)
+	r.SendHeartbeat(ctx)
 
 	for {
 		select {
 		case <-ticker.C:
-			r.sendHeartbeat(ctx)
+			r.SendHeartbeat(ctx)
 		case <-ctx.Done():
+			r.SetStatus("STOPPED")
+			r.SendHeartbeat(context.Background())
 			return
 		}
 	}
 }
 
-func (r *Runner) sendHeartbeat(ctx context.Context) {
-	if err := r.store.UpsertReplicaHeartbeat(ctx, r.profile.ReplicaID); err != nil {
+// SetStatus updates the status of the current replica node.
+func (r *Runner) SetStatus(status string) {
+	r.node.Status = status
+}
+
+// SendHeartbeat upserts the replica node heartbeat into the database.
+func (r *Runner) SendHeartbeat(ctx context.Context) {
+	if err := r.store.UpsertReplicaHeartbeat(ctx, r.node); err != nil {
 		slog.Error("Failed to send heartbeat", log.BBError(err))
 	}
 }

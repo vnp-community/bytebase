@@ -29,14 +29,14 @@ import (
 type PlanService struct {
 	v1connect.UnimplementedPlanServiceHandler
 	store          *store.Store
-	bus            *bus.Bus
+	bus            bus.EventBus
 	iamManager     *iam.Manager
 	webhookManager *webhook.Manager
 	licenseService *enterprise.LicenseService
 }
 
 // NewPlanService returns a plan service instance.
-func NewPlanService(store *store.Store, bus *bus.Bus, iamManager *iam.Manager, webhookManager *webhook.Manager, licenseService *enterprise.LicenseService) *PlanService {
+func NewPlanService(store *store.Store, bus bus.EventBus, iamManager *iam.Manager, webhookManager *webhook.Manager, licenseService *enterprise.LicenseService) *PlanService {
 	return &PlanService{
 		store:          store,
 		bus:            bus,

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useEffect, useMemo, useState } from "react";
 import { useVueState } from "@/react/hooks/useVueState";
 import { router } from "@/router";

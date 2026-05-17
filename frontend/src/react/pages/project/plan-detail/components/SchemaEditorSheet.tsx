@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { cloneDeep } from "lodash-es";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";

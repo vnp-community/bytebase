@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useState } from "react";

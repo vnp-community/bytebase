@@ -37,8 +37,8 @@ CREATE INDEX IF NOT EXISTS idx_bus_message_unprocessed ON bus_message (processed
 
 ## Acceptance Criteria
 
-- [ ] `bus_message` table created via migration
-- [ ] Dual-write: PG + channel (channel non-blocking)
-- [ ] Recovery on leader startup
-- [ ] Backward compatible: `PersistentBus` embeds `*Bus`
-- [ ] `go build ./backend/component/bus/...` passes
+- [x] `bus_message` table created via migration
+- [x] Dual-write: PG + channel (channel non-blocking)
+- [x] Recovery on leader startup
+- [x] Backward compatible: `PersistentBus` embeds `*Bus`
+- [x] `go build ./backend/component/bus/...` passes

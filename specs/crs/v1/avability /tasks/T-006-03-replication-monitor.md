@@ -44,9 +44,9 @@ if s.profile.RegionRole != "" {
 
 ## Acceptance Criteria
 
-- [ ] 2 Prometheus gauges: lag_seconds, replication_status
-- [ ] Primary queries `pg_stat_replication`
-- [ ] Standby queries replay timestamp
-- [ ] CRITICAL log when lag > 300s
-- [ ] 30s check interval
-- [ ] `go build ./backend/runner/replication/...` passes
+- [x] 2 Prometheus gauges: lag_seconds, replication_status
+- [x] Primary queries `pg_stat_replication`
+- [x] Standby queries replay timestamp
+- [x] CRITICAL log when lag > 300s
+- [x] 30s check interval
+- [x] `go build ./backend/runner/replication/...` passes

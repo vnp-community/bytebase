@@ -65,7 +65,7 @@ go poolMon.Run(ctx, &s.runnerWG)
 
 ## Acceptance Criteria
 
-- [ ] `PoolMonitor` follows same runner pattern as `MemoryMonitor`
-- [ ] Logs warning when pool utilization > 80%
-- [ ] Wired into `Server.Run()` lifecycle
-- [ ] `go build ./backend/...` passes
+- [x] `PoolMonitor` follows same runner pattern as `MemoryMonitor`
+- [x] Logs warning when pool utilization > 80%
+- [x] Wired into `Server.Run()` lifecycle
+- [x] `go build ./backend/...` passes

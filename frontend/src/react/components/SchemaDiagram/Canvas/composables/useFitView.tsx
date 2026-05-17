@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useCallback, useEffect, useRef } from "react";
 import { DEFAULT_PADDINGS, ZOOM_RANGE } from "../../common/const";
 import { useSchemaDiagramContext } from "../../common/context";

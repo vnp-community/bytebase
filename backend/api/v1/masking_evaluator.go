@@ -49,7 +49,7 @@ func (m *maskingLevelEvaluator) withMaskingRulePolicy(maskingRulePolicy *storepb
 	return m
 }
 
-// nolint
+//nolint:unused // withDataClassificationSetting called via maskingLevelEvaluator builder chain
 func (m *maskingLevelEvaluator) withDataClassificationSetting(dataClassification *storepb.DataClassificationSetting) *maskingLevelEvaluator {
 	if dataClassification == nil {
 		return m
@@ -60,7 +60,7 @@ func (m *maskingLevelEvaluator) withDataClassificationSetting(dataClassification
 	return m
 }
 
-// nolint
+//nolint:unused // withSemanticTypeSetting called via maskingLevelEvaluator builder chain
 func (m *maskingLevelEvaluator) withSemanticTypeSetting(semanticTypeSetting *storepb.SemanticTypeSetting) *maskingLevelEvaluator {
 	if semanticTypeSetting == nil {
 		return m
@@ -75,7 +75,7 @@ func (m *maskingLevelEvaluator) getDataClassificationConfig(classificationID str
 	return m.dataClassificationIDMap[classificationID]
 }
 
-// nolint
+//nolint:unused // evaluateSemanticTypeOfColumn called via maskingLevelEvaluator interface
 func (m *maskingLevelEvaluator) evaluateSemanticTypeOfColumn(
 	databaseMessage *store.DatabaseMessage,
 	schemaName, tableName, columnName,

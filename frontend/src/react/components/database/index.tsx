@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 export type { CreateDatabaseSheetProps } from "./CreateDatabaseSheet";
 export { CreateDatabaseSheet } from "./CreateDatabaseSheet";
 export type { DatabaseBatchOperationsBarProps } from "./DatabaseBatchOperationsBar";

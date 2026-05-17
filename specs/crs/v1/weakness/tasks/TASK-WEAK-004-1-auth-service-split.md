@@ -6,6 +6,8 @@
 | Priority | P1 |
 | Depends On | — |
 | Est. | M (move ~1600 LoC across files) |
+| Status | ✅ Done |
+| Completed | 2026-05-12 |
 
 ## Objective
 
@@ -44,7 +46,13 @@ go test ./backend/tests/... -count=1
 
 ## Acceptance Criteria
 
-- [ ] `auth_service.go` reduced to ≤400 lines
-- [ ] `go build` passes — no compile errors
-- [ ] All existing tests pass unchanged
-- [ ] No new imports needed (same package)
+- [x] `auth_service.go` reduced to 224 lines (≤400 ✓)
+- [x] `go build` passes — no compile errors
+- [x] All existing tests pass unchanged
+- [x] No new imports needed (same package)
+
+## Implementation Notes
+
+- Split into 9 files: `auth_service.go` (224), `auth_service_login.go` (352), `auth_service_password.go` (386), `auth_service_token.go` (353), `auth_service_idp.go` (298), `auth_service_helpers.go` (269), `auth_service_mfa.go` (137), `auth_service_di.go` (78), `auth_service_email.go` (19)
+- All files in same package `v1`, methods on `*AuthService`
+- `go vet` passes, file-size lint passes

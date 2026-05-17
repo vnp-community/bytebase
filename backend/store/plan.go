@@ -114,6 +114,9 @@ func (s *Store) CreatePlan(ctx context.Context, plan *PlanMessage, creator strin
 
 // GetPlan gets a plan.
 func (s *Store) GetPlan(ctx context.Context, find *FindPlanMessage) (*PlanMessage, error) {
+	if err := validateCompositePKQuery("plan", find.ProjectID, find.UID); err != nil {
+		return nil, err
+	}
 	plans, err := s.ListPlans(ctx, find)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list plans")

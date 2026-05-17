@@ -29,7 +29,7 @@ const (
 // Scheduler is the scheduler for task run.
 type Scheduler struct {
 	store          *store.Store
-	bus            *bus.Bus
+	bus            bus.EventBus
 	webhookManager *webhook.Manager
 	licenseService *enterprise.LicenseService
 	executorMap    map[storepb.Task_Type]Executor
@@ -42,7 +42,7 @@ type Scheduler struct {
 // NewScheduler will create a new scheduler.
 func NewScheduler(
 	store *store.Store,
-	bus *bus.Bus,
+	bus bus.EventBus,
 	webhookManager *webhook.Manager,
 	licenseService *enterprise.LicenseService,
 	profile *config.Profile,

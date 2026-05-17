@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
 import type { ComponentProps } from "react";
 import { cn } from "@/react/lib/utils";

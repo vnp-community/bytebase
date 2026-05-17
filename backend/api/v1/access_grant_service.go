@@ -27,11 +27,11 @@ type AccessGrantService struct {
 	store          *store.Store
 	licenseService *enterprise.LicenseService
 	webhookManager *webhook.Manager
-	bus            *bus.Bus
+	bus            bus.EventBus
 }
 
 // NewAccessGrantService returns a new access grant service instance.
-func NewAccessGrantService(store *store.Store, licenseService *enterprise.LicenseService, webhookManager *webhook.Manager, bus *bus.Bus) *AccessGrantService {
+func NewAccessGrantService(store *store.Store, licenseService *enterprise.LicenseService, webhookManager *webhook.Manager, bus bus.EventBus) *AccessGrantService {
 	return &AccessGrantService{
 		store:          store,
 		licenseService: licenseService,

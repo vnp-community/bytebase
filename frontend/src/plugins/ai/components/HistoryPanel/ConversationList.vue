@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <div class="h-full overflow-hidden flex flex-col">
     <div class="flex-1 overflow-y-auto p-1 flex flex-col gap-y-2">

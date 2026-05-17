@@ -51,8 +51,8 @@ if s.profile.BackupEnabled {
 
 ## Acceptance Criteria
 
-- [ ] Cron-based scheduling (robfig/cron)
-- [ ] Leader-only execution
-- [ ] RPO compliance monitoring with Prometheus metrics
-- [ ] Disabled by default (`BB_BACKUP_ENABLED=false`)
-- [ ] `go build ./backend/...` passes
+- [x] Cron-based scheduling (robfig/cron)
+- [x] Leader-only execution
+- [x] RPO compliance monitoring with Prometheus metrics
+- [x] Disabled by default (`BB_BACKUP_ENABLED=false`)
+- [x] `go build ./backend/...` passes

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { describe, expect, it } from "vitest";
 import { anchor, generateLine, grow, pickPorts } from "./ForeignKeyLine";
 

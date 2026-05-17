@@ -6,6 +6,8 @@
 | Priority | P0 |
 | Depends On | — |
 | Est. | M (~150 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-10 |
 
 ## Objective
 
@@ -16,8 +18,8 @@ Replace static CSP string with per-request nonce-based CSP. Eliminates `style-sr
 | Action | Path |
 |--------|------|
 | CREATE | `backend/server/csp.go` |
-| MODIFY | `backend/server/echo_routes.go` — `securityHeadersMiddleware` |
-| MODIFY | `backend/component/config/profile.go` — add `CSPNonceEnabled` flag |
+| MODIFY | `backend/server/echo_routes.go` — `securityHeadersMiddleware` → `newSecurityHeadersMiddleware` |
+| MODIFY | `backend/component/config/profile.go` — (feature flag via env var `CSP_NONCE_ENABLED`) |
 
 ## Specification
 
@@ -50,7 +52,15 @@ func securityHeadersMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 
 ## Acceptance Criteria
 
-- [ ] Each request gets unique 128-bit nonce
-- [ ] CSP header contains `'nonce-{nonce}'` instead of `'unsafe-inline'` in style-src
-- [ ] Feature flag `CSP_NONCE_ENABLED=false` → legacy CSP (no behavior change)
-- [ ] Unit test: `TestGenerateNonce` unique, `TestBuildCSP` no unsafe-inline
+- [x] Each request gets unique 128-bit nonce
+- [x] CSP header contains `'nonce-{nonce}'` instead of `'unsafe-inline'` in style-src
+- [x] Feature flag `CSP_NONCE_ENABLED=false` → legacy CSP (no behavior change)
+- [x] Unit test: `TestGenerateNonce` unique, `TestBuildCSP` no unsafe-inline
+
+## Implementation Notes
+
+- Created `backend/server/csp.go` with `generateNonce()`, `GetCSPNonce()`, `buildCSP()`, `buildCSPDev()`, `buildCSPLegacy()`, and `newSecurityHeadersMiddleware()`
+- Replaced static `securityHeadersMiddleware` function in `echo_routes.go` with `newSecurityHeadersMiddleware(profile)` that accepts `*config.Profile` to determine dev/prod mode
+- Feature flag implemented via `CSP_NONCE_ENABLED` env var (supports "true", "1", "yes") — defaults to false for safe rollout
+- Nonce stored in request context via `cspNonceContextKey{}` for downstream HTML injection
+- All 10 unit tests pass (`TestGenerateNonce`, `TestBuildCSP`, `TestBuildCSPDev`, `TestBuildCSPLegacy`)

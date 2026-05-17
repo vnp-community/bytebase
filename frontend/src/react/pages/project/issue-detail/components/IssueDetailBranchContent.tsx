@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useIssueDetailContext } from "../context/IssueDetailContext";
 import { IssueDetailAccessGrantView } from "./IssueDetailAccessGrantView";
 import { IssueDetailDatabaseChangeView } from "./IssueDetailDatabaseChangeView";

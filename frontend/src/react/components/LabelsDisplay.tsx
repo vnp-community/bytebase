@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 /**
  * Displays label key:value pairs with an overflow count.
  */

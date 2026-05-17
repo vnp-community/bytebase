@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { MoreHorizontal, Star, Users, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Tooltip } from "@/react/components/ui/tooltip";

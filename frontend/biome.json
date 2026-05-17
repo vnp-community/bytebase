@@ -24,7 +24,11 @@
       "complexity": {
         "noUselessCatchBinding": "error",
         "noUselessEscapeInRegex": "error",
-        "noUselessTypeConstraint": "error"
+        "noUselessTypeConstraint": "error",
+        "noExcessiveCognitiveComplexity": {
+          "level": "warn",
+          "options": { "maxAllowedComplexity": 15 }
+        }
       },
       "correctness": {
         "noConstantCondition": "error",

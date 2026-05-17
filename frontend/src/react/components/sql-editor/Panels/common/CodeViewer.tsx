@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { ChevronLeft } from "lucide-react";
 import type * as monaco from "monaco-editor";
 import {

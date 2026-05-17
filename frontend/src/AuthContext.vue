@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <slot v-if="ready"></slot>
   <div v-else class="flex items-center justify-center h-screen">

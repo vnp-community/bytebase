@@ -158,7 +158,9 @@ export const migrateDraftsFromCache = async (project: string) => {
             visibility: Worksheet_Visibility.PRIVATE,
           })
         );
-      } catch {}
+      } catch (e) {
+        console.warn("[migrateDraftsFromCache] Failed to migrate draft:", e);
+      }
     }
     const index = draftTabList.value.findIndex((d) => d.id === draft.id);
     if (index >= 0) {

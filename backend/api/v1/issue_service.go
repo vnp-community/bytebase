@@ -28,7 +28,7 @@ type IssueService struct {
 	v1connect.UnimplementedIssueServiceHandler
 	store          *store.Store
 	webhookManager *webhook.Manager
-	bus            *bus.Bus
+	bus            bus.EventBus
 	licenseService *enterprise.LicenseService
 	iamManager     *iam.Manager
 }
@@ -43,7 +43,7 @@ type filterIssueMessage struct {
 func NewIssueService(
 	store *store.Store,
 	webhookManager *webhook.Manager,
-	bus *bus.Bus,
+	bus bus.EventBus,
 	licenseService *enterprise.LicenseService,
 	iamManager *iam.Manager,
 ) *IssueService {

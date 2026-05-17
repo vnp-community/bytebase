@@ -49,8 +49,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 ## Acceptance Criteria
 
-- [ ] `gracefulShutdownPeriod` = 30s
-- [ ] DRAINING heartbeat sent before HTTP shutdown
-- [ ] STOPPED heartbeat sent after runners exit
-- [ ] Existing cleanup order preserved (sample instances, PG stoppers)
-- [ ] `go build ./backend/server/...` passes
+- [x] `gracefulShutdownPeriod` = 30s
+- [x] DRAINING heartbeat sent before HTTP shutdown
+- [x] STOPPED heartbeat sent after runners exit
+- [x] Existing cleanup order preserved (sample instances, PG stoppers)
+- [x] `go build ./backend/server/...` passes

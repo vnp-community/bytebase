@@ -19,6 +19,8 @@ const (
 	heartbeatRetentionPeriod     = 1 * time.Hour
 	exportArchiveRetentionPeriod = 24 * time.Hour
 	oauth2ClientRetentionPeriod  = 30 * 24 * time.Hour // 30 days of inactivity
+	busQueueRetentionPeriod      = 24 * time.Hour       // keep done messages for 24h
+	busQueueStaleClaimTimeout    = 5 * time.Minute       // reclaim stale processing messages
 )
 
 // DataCleaner periodically cleans up expired data from the database.
@@ -81,6 +83,7 @@ func (c *DataCleaner) cleanup(ctx context.Context) {
 	c.cleanupWebRefreshTokens(ctx)
 	c.cleanupEmailVerificationCodes(ctx)
 	c.cleanupStaleHeartbeats(ctx)
+	c.cleanupBusQueue(ctx)
 }
 
 func (c *DataCleaner) detectStaleTaskRuns(ctx context.Context) {
@@ -164,5 +167,45 @@ func (c *DataCleaner) cleanupEmailVerificationCodes(ctx context.Context) {
 		slog.Error("Failed to clean up expired email verification codes", log.BBError(err))
 	} else if rowsAffected > 0 {
 		slog.Info("Cleaned up expired email verification codes", slog.Int64("count", rowsAffected))
+	}
+}
+
+// cleanupBusQueue removes completed bus queue messages older than the retention period
+// and reclaims stale processing messages that were claimed but never completed.
+func (c *DataCleaner) cleanupBusQueue(ctx context.Context) {
+	db := c.store.GetRunnerDB()
+	if db == nil {
+		return
+	}
+
+	// Delete done messages past retention
+	cutoff := time.Now().Add(-busQueueRetentionPeriod)
+	result, err := db.ExecContext(ctx,
+		`DELETE FROM bus_queue WHERE status IN ('done') AND completed_at < $1`,
+		cutoff,
+	)
+	if err != nil {
+		slog.Error("Failed to clean up bus queue done messages", log.BBError(err))
+	} else if rowsAffected, _ := result.RowsAffected(); rowsAffected > 0 {
+		slog.Info("Cleaned up bus queue done messages",
+			slog.Int64("count", rowsAffected),
+			slog.Time("cutoff", cutoff),
+		)
+	}
+
+	// Reclaim stale processing messages (claimed but never completed)
+	staleCutoff := time.Now().Add(-busQueueStaleClaimTimeout)
+	result, err = db.ExecContext(ctx,
+		`UPDATE bus_queue SET status = 'pending', claimed_at = NULL, claimed_by = NULL, updated_at = NOW()
+		 WHERE status = 'processing' AND claimed_at < $1`,
+		staleCutoff,
+	)
+	if err != nil {
+		slog.Error("Failed to reclaim stale bus queue messages", log.BBError(err))
+	} else if rowsAffected, _ := result.RowsAffected(); rowsAffected > 0 {
+		slog.Info("Reclaimed stale bus queue messages",
+			slog.Int64("count", rowsAffected),
+			slog.Time("staleCutoff", staleCutoff),
+		)
 	}
 }

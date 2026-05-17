@@ -28,8 +28,8 @@ Key points:
 
 ## Acceptance Criteria
 
-- [ ] `health.NewChecker(db, registry)` registers 2 Prometheus metrics (gauge + histogram)
-- [ ] `RunAll()` returns overall + per-check results
-- [ ] PG check: UNHEALTHY on ping failure, DEGRADED when pool > 90% utilized
-- [ ] Memory check: DEGRADED > 1.5GB alloc, UNHEALTHY > 2.5GB
-- [ ] `go build ./backend/component/health/...` passes
+- [x] `health.NewChecker(db, registry)` registers 2 Prometheus metrics (gauge + histogram)
+- [x] `RunAll()` returns overall + per-check results
+- [x] PG check: UNHEALTHY on ping failure, DEGRADED when pool > 90% utilized
+- [x] Memory check: DEGRADED > 1.5GB alloc, UNHEALTHY > 2.5GB
+- [x] `go build ./backend/component/health/...` passes

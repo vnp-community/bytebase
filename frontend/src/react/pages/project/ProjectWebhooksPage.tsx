@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { EllipsisVertical, Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";

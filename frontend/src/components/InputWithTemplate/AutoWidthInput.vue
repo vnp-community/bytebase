@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <div>
     <div ref="divRef" class="fixed invisible text-base leading-6">

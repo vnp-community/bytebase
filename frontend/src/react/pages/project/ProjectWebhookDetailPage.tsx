@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { create as createProto } from "@bufbuild/protobuf";
 import { useMemo } from "react";
 import { useVueState } from "@/react/hooks/useVueState";

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { create } from "@bufbuild/protobuf";
 import { debounce, orderBy } from "lodash-es";
 import { Loader2 } from "lucide-react";

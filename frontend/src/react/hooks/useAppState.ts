@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAuthStore } from "@/store/modules/v1/auth";
+import { useSubscriptionV1Store } from "@/store/modules/v1/subscription";
+import { useVueState } from "./useVueState";
 import {
   getProjectResourceId,
   isConnectAlreadyExists,
@@ -19,13 +22,21 @@ import { storageKeyRecentProjects } from "@/utils/storage-keys";
 
 export { isConnectAlreadyExists };
 
-export function useCurrentUser() {
-  const user = useAppStore((state) => state.currentUser);
-  const loadCurrentUser = useAppStore((state) => state.loadCurrentUser);
+let appStateInitialized = false;
+
+export function useAppStateInit() {
   useEffect(() => {
-    void loadCurrentUser();
-  }, [loadCurrentUser]);
-  return user;
+    if (appStateInitialized) return;
+    appStateInitialized = true;
+  }, []);
+}
+
+export function resetAppStateInit() {
+  appStateInitialized = false;
+}
+
+export function useCurrentUser() {
+  return useVueState(() => useAuthStore().currentUser);
 }
 
 export function useWorkspace() {
@@ -38,13 +49,9 @@ export function useWorkspace() {
 }
 
 export function useSubscription() {
-  const subscription = useAppStore((state) => state.subscription);
-  const loadSubscription = useAppStore((state) => state.loadSubscription);
-  const uploadLicense = useAppStore((state) => state.uploadLicense);
-  useEffect(() => {
-    void loadSubscription();
-  }, [loadSubscription]);
-  return { subscription, uploadLicense };
+  const store = useSubscriptionV1Store();
+  const subscription = useVueState(() => store.subscription);
+  return { subscription, uploadLicense: store.uploadLicense };
 }
 
 export function useSubscriptionState() {

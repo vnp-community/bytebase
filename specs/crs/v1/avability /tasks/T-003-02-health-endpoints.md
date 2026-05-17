@@ -58,7 +58,7 @@ e.GET("/readyz", func(c *echo.Context) error {
 
 ## Acceptance Criteria
 
-- [ ] `/healthz` unchanged → returns "OK" (200)
-- [ ] `/healthz/deep` returns JSON with checks, node, version, uptime
-- [ ] `/readyz` returns 503 if any critical check UNHEALTHY
-- [ ] `go build ./backend/server/...` passes
+- [x] `/healthz` unchanged → returns "OK" (200)
+- [x] `/healthz/deep` returns JSON with checks, node, version, uptime
+- [x] `/readyz` returns 503 if any critical check UNHEALTHY
+- [x] `go build ./backend/server/...` passes

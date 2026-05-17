@@ -42,8 +42,8 @@ Parse from env in profile initialization (existing pattern).
 
 ## Acceptance Criteria
 
-- [ ] 3 new Profile fields
-- [ ] `RegionRole` type with 3 constants
-- [ ] `IsStandby()` / `IsPrimary()` helpers
-- [ ] Default (empty) → PRIMARY behavior
-- [ ] `go build ./backend/component/config/...` passes
+- [x] 3 new Profile fields
+- [x] `RegionRole` type with 3 constants
+- [x] `IsStandby()` / `IsPrimary()` helpers
+- [x] Default (empty) → PRIMARY behavior
+- [x] `go build ./backend/component/config/...` passes

@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <!-- This component is used when uses don't have available plan to access the feature, or the instance is missing required license. -->
 <!-- Normally this should be a blocker to use the feature -->
 <template>

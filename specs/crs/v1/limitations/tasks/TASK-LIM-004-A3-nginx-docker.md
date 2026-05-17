@@ -46,8 +46,24 @@ EXPOSE 80
 
 ## Acceptance Criteria
 
-- [ ] SPA routing works (deep links serve index.html)
-- [ ] Static assets cached with immutable headers
-- [ ] API proxy routes to backend correctly
-- [ ] WebSocket upgrade works for LSP
-- [ ] Docker image builds and serves frontend
+- [x] SPA routing works (deep links serve index.html) → **DONE**: `try_files $uri $uri/ /index.html` in `location /`
+- [x] Static assets cached with immutable headers → **DONE**: `location /assets/` with `expires 1y; Cache-Control: public, immutable`
+- [x] API proxy routes to backend correctly → **DONE**: 5 proxy locations: ConnectRPC, REST, LSP, MCP, webhook
+- [x] WebSocket upgrade works for LSP → **DONE**: `proxy_set_header Upgrade $http_upgrade; Connection "upgrade"` in `/lsp`
+- [x] Docker image builds and serves frontend → **DONE**: Multi-stage Dockerfile (node:20-alpine build → nginx:1.27-alpine serve)
+
+## Implementation Notes
+
+- Created `deploy/nginx/bytebase-frontend.conf`:
+  - SPA fallback: `try_files $uri $uri/ /index.html`
+  - 5 reverse proxy locations: `/bytebase.v1.`, `/v1/`, `/lsp`, `/mcp/`, `/hook/`
+  - LSP WebSocket upgrade with 86400s read timeout
+  - MCP SSE with buffering disabled
+  - Health check endpoint at `/nginx-health`
+- Created `deploy/docker/Dockerfile.frontend`:
+  - Stage 1: `node:20-alpine` + pnpm install + build
+  - Stage 2: `nginx:1.27-alpine` serving built assets
+  - HEALTHCHECK via wget to `/nginx-health`
+  - Runtime env-config.js override via volume mount
+
+**Status: ✅ DONE**

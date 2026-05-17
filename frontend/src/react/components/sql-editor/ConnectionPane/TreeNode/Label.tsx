@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { ShieldAlert } from "lucide-react";
 import { HighlightLabelText } from "@/react/components/HighlightLabelText";
 import { useVueState } from "@/react/hooks/useVueState";

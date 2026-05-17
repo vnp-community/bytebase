@@ -30,7 +30,8 @@ export const readExplainFromToken = (token: string) => {
       return obj;
     }
     return undefined;
-  } catch {
+  } catch (e) {
+    console.warn("[readExplainFromToken] Failed to parse token data:", e);
     return undefined;
   }
 };

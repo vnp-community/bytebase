@@ -34,8 +34,8 @@ func (s *Store) UpsertReplicaHeartbeat(ctx context.Context, replicaID string) er
 
 ## Acceptance Criteria
 
-- [ ] `UpsertReplicaHeartbeat` accepts `*model.ReplicaNode`
-- [ ] `MarkStaleReplicas` updates status for stale nodes
-- [ ] `ListActiveReplicas` returns active nodes list
-- [ ] Existing `CountActiveReplicas` and `DeleteStaleReplicaHeartbeats` unchanged
-- [ ] `go build ./backend/store/...` passes
+- [x] `UpsertReplicaHeartbeat` accepts `*model.ReplicaNode`
+- [x] `MarkStaleReplicas` updates status for stale nodes
+- [x] `ListActiveReplicas` returns active nodes list
+- [x] Existing `CountActiveReplicas` and `DeleteStaleReplicaHeartbeats` unchanged
+- [x] `go build ./backend/store/...` passes

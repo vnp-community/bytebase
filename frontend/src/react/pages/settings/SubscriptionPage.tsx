@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Copy, Pencil } from "lucide-react";
 import { type ChangeEvent, useState } from "react";
 import { useTranslation } from "react-i18next";

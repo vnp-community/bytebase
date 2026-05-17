@@ -18,12 +18,12 @@ import (
 // nolint:revive
 type RolloutCreator struct {
 	store          *store.Store
-	bus            *bus.Bus
+	bus            bus.EventBus
 	webhookManager *webhook.Manager
 }
 
 // NewRolloutCreator creates a new rollout creator.
-func NewRolloutCreator(store *store.Store, bus *bus.Bus, webhookManager *webhook.Manager) *RolloutCreator {
+func NewRolloutCreator(store *store.Store, bus bus.EventBus, webhookManager *webhook.Manager) *RolloutCreator {
 	return &RolloutCreator{
 		store:          store,
 		bus:            bus,

@@ -52,7 +52,7 @@ func (d *RetryDriver) GetDB() *sql.DB                  { return d.inner.GetDB() 
 
 ## Acceptance Criteria
 
-- [ ] Implements `db.Driver` interface (verify all methods)
-- [ ] Retry on Ping and Execute only
-- [ ] Passthrough for Close, GetDB, QueryConn
-- [ ] `go build ./backend/plugin/db/...` passes
+- [x] Implements `db.Driver` interface (verify all methods)
+- [x] Retry on Ping and Execute only
+- [x] Passthrough for Close, GetDB, QueryConn
+- [x] `go build ./backend/plugin/db/...` passes

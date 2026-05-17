@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Menu as BaseMenu } from "@base-ui/react/menu";
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { flushSync } from "react-dom";

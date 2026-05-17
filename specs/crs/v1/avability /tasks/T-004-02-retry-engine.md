@@ -107,8 +107,8 @@ func isRetryable(err error) bool {
 
 ## Acceptance Criteria
 
-- [ ] `RetryableExec` với exponential backoff + jitter
-- [ ] `isRetryable` phân loại 9 PG error codes + 4 connection patterns
-- [ ] Respects `ctx.Done()` giữa retries
-- [ ] `go build ./backend/store/...` passes
-- [ ] Unit test: `isRetryable` returns true cho PG code "40001", false cho "23505" (unique violation)
+- [x] `RetryableExec` với exponential backoff + jitter
+- [x] `isRetryable` phân loại 9 PG error codes + 4 connection patterns
+- [x] Respects `ctx.Done()` giữa retries
+- [x] `go build ./backend/store/...` passes
+- [x] Unit test: `isRetryable` returns true cho PG code "40001", false cho "23505" (unique violation)

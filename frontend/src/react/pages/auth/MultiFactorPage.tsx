@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { create } from "@bufbuild/protobuf";
 import { KeyRound, Smartphone } from "lucide-react";
 import { useMemo, useState } from "react";

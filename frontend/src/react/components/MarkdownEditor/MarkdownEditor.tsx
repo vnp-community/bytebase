@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import DOMPurify from "dompurify";
 import { Bold, Code2, Hash, Heading1, Link2 } from "lucide-react";
 import MarkdownIt from "markdown-it";

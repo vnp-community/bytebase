@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import type { ReactNode } from "react";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";

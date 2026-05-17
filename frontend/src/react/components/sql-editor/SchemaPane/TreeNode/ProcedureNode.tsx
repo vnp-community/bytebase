@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useVueState } from "@/react/hooks/useVueState";
 import { useDBSchemaV1Store } from "@/store";
 import type { TreeNode } from "../schemaTree";

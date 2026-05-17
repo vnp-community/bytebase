@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import type { ComponentPropsWithoutRef } from "react";
 import { ColumnResizeHandle } from "@/react/components/ui/column-resize-handle";

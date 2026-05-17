@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <span class="w-4 h-auto opacity-80 shrink-0">
     <ArrowDownWideNarrow

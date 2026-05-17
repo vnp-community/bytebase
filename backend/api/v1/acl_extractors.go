@@ -28,12 +28,32 @@ var aclResourceExtractors = map[string]ResourceExtractorFunc{
 	// ============================================================
 	"Login":          extractNone,
 	"Logout":         extractNone,
+	"Refresh":        extractNone,
+	"GetCurrentUser": extractNone,
 	"GetUser":        extractFromName,
 	"ListUsers":      extractNone,
 	"CreateUser":     extractNone,
 	"UpdateUser":     extractFromUserUpdate,
 	"DeleteUser":     extractFromName,
 	"UndeleteUser":   extractFromName,
+
+	// ============================================================
+	// ActuatorService — workspace-level
+	// ============================================================
+	"GetActuatorInfo":    extractNone,
+	"UpdateActuatorInfo": extractNone,
+
+	// ============================================================
+	// SubscriptionService — workspace-level
+	// ============================================================
+	"GetSubscription":    extractNone,
+	"UpdateSubscription": extractNone,
+
+	// ============================================================
+	// WorkspaceService (additional)
+	// ============================================================
+	"ListWorkspaces": extractNone,
+
 
 	// ============================================================
 	// ProjectService

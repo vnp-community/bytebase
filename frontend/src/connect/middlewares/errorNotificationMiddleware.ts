@@ -11,7 +11,7 @@ export type SilentRequestOptions = {
 
   /**
    * If set, will NOT handle specified status codes is this array.
-   * Default to [NOT_FOUND], can be override.
+   * Default to [UNAUTHENTICATED], can be override.
    */
   ignoredCodes?: Code[];
 };
@@ -36,7 +36,7 @@ export const errorNotificationInterceptor: Interceptor =
         const ignoredCodes = req.contextValues.get(ignoredCodesContextKey);
         if (
           (ignoredCodes.length === 0
-            ? [Code.NotFound, Code.Unauthenticated]
+            ? [Code.Unauthenticated]
             : ignoredCodes
           ).includes(error.code)
         ) {

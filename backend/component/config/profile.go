@@ -7,6 +7,14 @@ import (
 	"github.com/bytebase/bytebase/backend/common"
 )
 
+type RegionRole string
+
+const (
+	RegionRolePrimary RegionRole = "PRIMARY"
+	RegionRoleStandby RegionRole = "STANDBY"
+	RegionRoleDR      RegionRole = "DR"
+)
+
 // Profile is the configuration to start main server.
 // Profile must not be copied, its fields must not be modified unless mentioned otherwise.
 type Profile struct {
@@ -70,6 +78,32 @@ type Profile struct {
 	CacheRedisURL string
 	// DualPool enables API/Runner connection pool isolation. Default: false (single pool).
 	DualPool bool
+
+	// --- Backup Feature Flags ---
+
+	// BackupEnabled enables the automated backup scheduler.
+	BackupEnabled bool
+	// BackupSchedule is the cron schedule for full backups.
+	BackupSchedule string
+	// BackupPath is the directory to store backups.
+	BackupPath string
+	// TargetRPOMinutes is the target RPO for monitoring.
+	TargetRPOMinutes int
+	// BackupEncryptionKey is the AES-256-GCM key for encrypting backups.
+	BackupEncryptionKey string
+
+	// --- Multi-Region Feature Flags ---
+	RegionName       string     // env: REGION_NAME
+	RegionRole       RegionRole // env: REGION_ROLE
+	PrimaryRegionURL string     // env: PRIMARY_REGION_URL
+}
+
+func (p *Profile) IsStandby() bool {
+	return p.RegionRole == RegionRoleStandby
+}
+
+func (p *Profile) IsPrimary() bool {
+	return p.RegionRole == "" || p.RegionRole == RegionRolePrimary
 }
 
 // UseEmbedDB returns whether to use embedDB.

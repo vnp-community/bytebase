@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { CheckCircle } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";

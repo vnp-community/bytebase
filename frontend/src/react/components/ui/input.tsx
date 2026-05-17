@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Input as BaseInput } from "@base-ui/react/input";
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";

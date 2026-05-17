@@ -1,0 +1,22 @@
+# .aiignore — Files AI agents should NOT read
+# These are auto-generated or too large to be useful in context windows.
+# Use the corresponding AI reference files instead.
+
+# Proto-ES generated types (~38K LOC) — use src/types/ai-ref/ instead
+src/types/proto-es/
+
+# OpenAPI generated indexes (~29K LOC) — use .ai-context/CONNECTRPC_GUIDE.md
+src/plugins/agent/logic/tools/gen/
+src/react/plugins/agent/logic/tools/gen/
+
+# Package manager lock file
+pnpm-lock.yaml
+
+# Build output
+dist/
+
+# Dependencies
+node_modules/
+
+# Large generated/compiled assets
+*.map

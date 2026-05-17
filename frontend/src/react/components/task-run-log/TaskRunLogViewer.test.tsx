@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { CheckCircle2 } from "lucide-react";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";

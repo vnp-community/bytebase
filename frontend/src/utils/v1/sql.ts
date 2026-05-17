@@ -58,8 +58,8 @@ export const extractSQLRowValuePlain = (value: RowValue | undefined) => {
     if (isReadableText) {
       try {
         return new TextDecoder().decode(new Uint8Array(byteArray));
-      } catch {
-        // If text decoding fails, fallback to hex
+      } catch (e) {
+        console.warn("[extractSQLRowValuePlain] Text decoding failed, falling back to hex:", e);
       }
     }
 

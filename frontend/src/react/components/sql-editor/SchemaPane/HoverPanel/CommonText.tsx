@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 type Props = {
   readonly content: string;
 };

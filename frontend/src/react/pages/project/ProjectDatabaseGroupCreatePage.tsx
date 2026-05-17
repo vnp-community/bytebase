@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { DatabaseGroupForm } from "@/react/components/DatabaseGroupForm";
 import { useVueState } from "@/react/hooks/useVueState";
 import { router } from "@/router";

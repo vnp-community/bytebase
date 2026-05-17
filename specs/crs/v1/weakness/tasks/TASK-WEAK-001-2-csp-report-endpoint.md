@@ -6,6 +6,8 @@
 | Priority | P1 |
 | Depends On | TASK-WEAK-001-1 |
 | Est. | S (~80 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-10 |
 
 ## Objective
 
@@ -28,6 +30,15 @@ Add `POST /api/csp-report` endpoint that logs CSP violations and exports Prometh
 
 ## Acceptance Criteria
 
-- [ ] Valid CSP report → 204 + counter increment
-- [ ] Invalid JSON → 400
-- [ ] Metric labels: `directive`, `blocked_uri`
+- [x] Valid CSP report → 204 + counter increment
+- [x] Invalid JSON → 400
+- [x] Metric labels: `directive`, `blocked_uri`
+
+## Implementation Notes
+
+- Created `backend/server/csp_report.go` with `handleCSPReport()` and `registerCSPReportRoute()`
+- Prometheus counter registered via `promauto.NewCounterVec` with namespace `bytebase`, name `csp_violations_total`
+- `blocked_uri` label truncated to 128 chars to prevent high-cardinality metric explosion
+- Uses `effective-directive` (CSP Level 3) with fallback to `violated-directive` (Level 2)
+- Route registered in `echo_routes.go` via `registerCSPReportRoute(e)` alongside `newSecurityHeadersMiddleware`
+- `report-uri /api/csp-report` directive added to both `buildCSP()` and `buildCSPDev()` in `csp.go`

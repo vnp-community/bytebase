@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { clone, create } from "@bufbuild/protobuf";
 import {
   Check,

@@ -18,7 +18,7 @@ type Server struct {
 	store           *store.Store
 	profile         *config.Profile
 	secret          string
-	bus             *bus.Bus
+	bus             bus.EventBus
 	iamManager      *iam.Manager
 	licenseService  *enterprise.LicenseService
 	authInterceptor *auth.APIAuthInterceptor
@@ -29,7 +29,7 @@ func NewServer(
 	store *store.Store,
 	profile *config.Profile,
 	secret string,
-	bus *bus.Bus,
+	bus bus.EventBus,
 	iamManager *iam.Manager,
 	licenseService *enterprise.LicenseService,
 ) *Server {

@@ -27,7 +27,7 @@ Xem SOL-AVAIL-001 §2.5. Key specs:
 
 ## Acceptance Criteria
 
-- [ ] Valid K8s Deployment YAML
-- [ ] Zero-downtime rolling update (maxUnavailable=0)
-- [ ] Probes configured correctly
-- [ ] Resource requests/limits set
+- [x] Valid K8s Deployment YAML
+- [x] Zero-downtime rolling update (maxUnavailable=0)
+- [x] Probes configured correctly
+- [x] Resource requests/limits set

@@ -24,11 +24,11 @@ const (
 // Listener listens for PostgreSQL NOTIFY signals.
 type Listener struct {
 	db  *sql.DB
-	bus *bus.Bus
+	bus bus.EventBus
 }
 
 // NewListener creates a new notify listener.
-func NewListener(db *sql.DB, bus *bus.Bus) *Listener {
+func NewListener(db *sql.DB, bus bus.EventBus) *Listener {
 	return &Listener{
 		db:  db,
 		bus: bus,

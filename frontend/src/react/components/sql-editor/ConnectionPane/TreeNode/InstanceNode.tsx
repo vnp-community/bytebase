@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { EngineIcon } from "@/react/components/EngineIcon";
 import { HighlightLabelText } from "@/react/components/HighlightLabelText";
 import type { SQLEditorTreeNode } from "@/types";

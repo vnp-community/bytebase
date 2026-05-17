@@ -16,7 +16,7 @@ import (
 
 // Store provides database access to all raw objects.
 type Store struct {
-	dbConnManager *DBConnectionManager
+	poolManager *PoolManager
 	enableCache   bool
 
 	// Cache.
@@ -32,6 +32,7 @@ type Store struct {
 	groupMembersCache *expirable.LRU[string, map[string]bool]
 	memberGroupsCache *expirable.LRU[string, []string]
 	dbSchemaCache     *expirable.LRU[string, *model.DatabaseMetadata]
+	dbSchemaL2Cache   *CompressedSchemaCache
 	iamPolicyCache    *expirable.LRU[string, *IamPolicyMessage]
 
 	// Large objects.
@@ -41,15 +42,29 @@ type Store struct {
 // New creates a new instance of Store.
 // pgURL can be either a direct PostgreSQL URL or a file path containing the URL.
 func New(ctx context.Context, pgURL string, enableCache bool) (*Store, error) {
+	// Initialize dual pool manager
+	poolManager, err := NewPoolManager(ctx, pgURL, PoolConfig{})
+	if err != nil {
+		return nil, err
+	}
+
+	dbCount := getEntityCount(ctx, poolManager.GetDefaultDB(), "db", "deleted = false")
+	instanceCount := getEntityCount(ctx, poolManager.GetDefaultDB(), "instance", "deleted = false")
+
+	dbCacheSize := adaptiveCacheSize(dbCount, 32768, 500000, 50)
+	schemaL1Size := adaptiveCacheSize(dbCount, 512, 5000, 2)
+	schemaL2Size := adaptiveCacheSize(dbCount, 5000, 100000, 25)
+	instanceCacheSize := adaptiveCacheSize(instanceCount, 1024, 32768, 80)
+
 	userEmailCache, err := lru.New[string, *UserMessage](32768)
 	if err != nil {
 		return nil, err
 	}
-	instanceCache, err := lru.New[string, *InstanceMessage](32768)
+	instanceCache, err := lru.New[string, *InstanceMessage](instanceCacheSize)
 	if err != nil {
 		return nil, err
 	}
-	databaseCache, err := lru.New[string, *DatabaseMessage](32768)
+	databaseCache, err := lru.New[string, *DatabaseMessage](dbCacheSize)
 	if err != nil {
 		return nil, err
 	}
@@ -73,17 +88,12 @@ func New(ctx context.Context, pgURL string, enableCache bool) (*Store, error) {
 	groupCache := expirable.NewLRU[string, *GroupMessage](1024, nil, time.Minute)
 	groupMembersCache := expirable.NewLRU[string, map[string]bool](1024, nil, time.Minute)
 	memberGroupsCache := expirable.NewLRU[string, []string](4096, nil, time.Minute)
-	dbSchemaCache := expirable.NewLRU[string, *model.DatabaseMetadata](128, nil, 5*time.Minute)
+	dbSchemaCache := expirable.NewLRU[string, *model.DatabaseMetadata](schemaL1Size, nil, 10*time.Minute)
+	dbSchemaL2Cache := NewCompressedSchemaCache(schemaL2Size, 30*time.Minute)
 	iamPolicyCache := expirable.NewLRU[string, *IamPolicyMessage](1024, nil, time.Minute)
 
-	// Initialize database connection (handles both direct URL and file-based)
-	dbConnManager := NewDBConnectionManager(pgURL)
-	if err := dbConnManager.Initialize(ctx); err != nil {
-		return nil, err
-	}
-
 	s := &Store{
-		dbConnManager: dbConnManager,
+		poolManager: poolManager,
 		enableCache:   enableCache,
 
 		// Cache.
@@ -99,6 +109,7 @@ func New(ctx context.Context, pgURL string, enableCache bool) (*Store, error) {
 		groupMembersCache: groupMembersCache,
 		memberGroupsCache: memberGroupsCache,
 		dbSchemaCache:     dbSchemaCache,
+		dbSchemaL2Cache:   dbSchemaL2Cache,
 		iamPolicyCache:    iamPolicyCache,
 	}
 
@@ -107,11 +118,17 @@ func New(ctx context.Context, pgURL string, enableCache bool) (*Store, error) {
 
 // Close closes underlying db.
 func (s *Store) Close() error {
-	return s.dbConnManager.Close()
+	return s.poolManager.Close()
 }
 
+// GetDB returns the default (API) database pool for backward compatibility.
 func (s *Store) GetDB() *sql.DB {
-	return s.dbConnManager.GetDB()
+	return s.poolManager.GetDefaultDB()
+}
+
+// GetRunnerDB returns the isolated runner database pool for background tasks.
+func (s *Store) GetRunnerDB() *sql.DB {
+	return s.poolManager.GetDB(PoolRunner)
 }
 
 // DeleteCache deletes the cache.
@@ -179,4 +196,24 @@ func getDatabaseCacheKey(workspace, instanceID, databaseName string) string {
 
 func getDBSchemaCacheKey(instanceID, databaseName string) string {
 	return fmt.Sprintf("%s/%s", instanceID, databaseName)
+}
+
+func adaptiveCacheSize(entityCount, minSize, maxSize, coveragePct int) int {
+	target := entityCount * coveragePct / 100
+	if target < minSize {
+		return minSize
+	}
+	if target > maxSize {
+		return maxSize
+	}
+	return target
+}
+
+func getEntityCount(ctx context.Context, db *sql.DB, table, condition string) int {
+	var count int
+	query := fmt.Sprintf("SELECT COUNT(1) FROM %s WHERE %s", table, condition)
+	if err := db.QueryRowContext(ctx, query).Scan(&count); err != nil {
+		return 0
+	}
+	return count
 }

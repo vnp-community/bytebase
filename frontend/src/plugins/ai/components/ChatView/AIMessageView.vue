@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <div
     class="border rounded-sm shadow-sm py-1 px-1 bg-gray-50 border-gray-400"

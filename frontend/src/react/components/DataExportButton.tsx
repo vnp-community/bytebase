@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import dayjs from "dayjs";
 import saveAs from "file-saver";
 import JSZip from "jszip";

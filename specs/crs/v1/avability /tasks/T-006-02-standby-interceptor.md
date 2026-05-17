@@ -34,8 +34,8 @@ func standbyRedirectMiddleware(profile *config.Profile) echo.MiddlewareFunc
 
 ## Acceptance Criteria
 
-- [ ] ConnectRPC interceptor blocks writes on standby
-- [ ] Echo middleware redirects HTTP writes to primary
-- [ ] Returns `codes.Unavailable` with primary URL
-- [ ] No-op when `IsPrimary()` (default)
-- [ ] `go build ./backend/...` passes
+- [x] ConnectRPC interceptor blocks writes on standby
+- [x] Echo middleware redirects HTTP writes to primary
+- [x] Returns `codes.Unavailable` with primary URL
+- [x] No-op when `IsPrimary()` (default)
+- [x] `go build ./backend/...` passes

@@ -16,3 +16,27 @@ var (
 		[]string{"operation", "status"},
 	)
 )
+
+func (s *Store) RegisterPoolMetrics() {
+	prometheus.MustRegister(
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "bytebase_db_pool_open_connections",
+			Help: "Number of open connections to metadata DB",
+		}, func() float64 { return float64(s.GetDB().Stats().OpenConnections) }),
+
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "bytebase_db_pool_in_use",
+			Help: "Number of connections currently in use",
+		}, func() float64 { return float64(s.GetDB().Stats().InUse) }),
+
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "bytebase_db_pool_idle",
+			Help: "Number of idle connections",
+		}, func() float64 { return float64(s.GetDB().Stats().Idle) }),
+
+		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+			Name: "bytebase_db_pool_wait_count",
+			Help: "Total number of connections waited for",
+		}, func() float64 { return float64(s.GetDB().Stats().WaitCount) }),
+	)
+}

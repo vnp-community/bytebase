@@ -35,7 +35,18 @@ Tạo service phát hiện khi embedded PG usage vượt ngưỡng production (>
 
 ## Acceptance Criteria
 
-- [ ] Returns `IsEmbedded=false` for external PG (no warning)
-- [ ] Correctly evaluates all 5 criteria
-- [ ] Warning shows when ≥2 criteria met
-- [ ] Dismiss persists for 30 days via settings
+- [x] Returns `IsEmbedded=false` for external PG (no warning) → **DONE**: Early return in `Check()` when `!profile.UseEmbedDB()`
+- [x] Correctly evaluates all 5 criteria → **DONE**: instance_count >5, user_count >10, changelog_count >100, uptime >30d, production_env
+- [x] Warning shows when ≥2 criteria met → **DONE**: `ShowWarning = CriteriaMet >= 2`
+- [x] Dismiss persists for 30 days via settings → **DONE**: Stored in `server_config` table with RFC3339 expiry
+
+## Implementation Notes
+
+- Created `backend/component/readiness/checker.go` (~200 LoC)
+  - Direct SQL queries for instance/changelog counts (avoids store method proliferation)
+  - Production env detection via case-insensitive "prod" substring matching in environment settings
+  - Uptime tracked from server start timestamp
+- Added `GetReadinessReport()` and `DismissReadinessWarning()` to `ActuatorService`
+- Dismiss uses `server_config(key, value)` table with `ON CONFLICT DO UPDATE` upsert
+
+**Status: ✅ DONE**

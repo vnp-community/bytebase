@@ -63,10 +63,9 @@ func (s *Store) ApplyOptions(ctx context.Context, opts ...StoreOption) (*PoolMan
 
 	// Dual pool setup
 	if cfg.dualPool {
-		pgURL := s.dbConnManager.GetPgURL()
+		pgURL := s.poolManager.GetPgURL()
 		var err error
-		pm, err = NewPoolManager(ctx, PoolConfig{
-			PGURL:    pgURL,
+		pm, err = NewPoolManager(ctx, pgURL, PoolConfig{
 			MaxConns: 50,
 		})
 		if err != nil {

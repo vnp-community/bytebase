@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Boxes, X } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";

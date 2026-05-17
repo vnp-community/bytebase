@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useCallback } from "react";
 import { DashboardBodyShell } from "@/react/components/DashboardBodyShell";
 import type {

@@ -1,5 +1,5 @@
 import { create } from "@bufbuild/protobuf";
-import { Code, createContextValues } from "@connectrpc/connect";
+import { Code, ConnectError, createContextValues } from "@connectrpc/connect";
 import { useLocalStorage } from "@vueuse/core";
 import { uniqueId } from "lodash-es";
 import { defineStore } from "pinia";
@@ -17,6 +17,9 @@ import { SQL_EDITOR_HOME_MODULE } from "@/router/sqlEditor";
 import {
   useActuatorV1Store,
   useAppFeature,
+  useDatabaseV1Store,
+  useInstanceV1Store,
+  useProjectV1Store,
   useUserStore,
   useWorkspaceV1Store,
 } from "@/store";
@@ -30,6 +33,7 @@ import {
 import { DatabaseChangeMode } from "@/types/proto-es/v1/setting_service_pb";
 import type { User } from "@/types/proto-es/v1/user_service_pb";
 import { storageKeyResetPassword } from "@/utils";
+import { clearPageCache } from "@/react/mount";
 import { extractUserEmail } from "./common";
 
 export const useAuthStore = defineStore("auth_v1", () => {
@@ -196,12 +200,34 @@ export const useAuthStore = defineStore("auth_v1", () => {
   };
 
   const logout = async () => {
+    let logoutSuccess = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await authServiceClientConnect.logout({});
+        logoutSuccess = true;
+        break;
+      } catch (error) {
+        console.warn(`[AuthStore] Logout attempt ${attempt + 1} failed:`, error);
+        if (attempt < 2) await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      }
+    }
+    if (!logoutSuccess) {
+      console.error("[AuthStore] All logout attempts failed — server session may persist");
+    }
     try {
-      await authServiceClientConnect.logout({});
-    } catch {
-      // nothing
+      // TASK-W-023: Reset domain stores on logout (moved from router auth-page visit)
+      useDatabaseV1Store().reset();
+      useProjectV1Store().reset();
+      useInstanceV1Store().reset();
+      try {
+        const { useConversationStore } = await import("@/plugins/ai/store");
+        useConversationStore().reset();
+      } catch {
+        // AI plugin may not be loaded — safe to ignore
+      }
     } finally {
       cleanupUserStorage(currentUserEmail.value);
+      clearPageCache();
       unauthenticatedOccurred.value = false;
       const pathname = location.pathname;
       // Replace and reload the page to clear frontend state directly.
@@ -221,8 +247,12 @@ export const useAuthStore = defineStore("auth_v1", () => {
       const user = await userStore.fetchCurrentUser();
       currentUserName.value = user.name;
       return user;
-    } catch {
-      // do nothing.
+    } catch (error) {
+      if (error instanceof ConnectError && error.code === Code.Unauthenticated) {
+        return undefined; // Expected when not logged in
+      }
+      console.error("[AuthStore] fetchCurrentUser failed:", error);
+      return undefined;
     }
   };
 

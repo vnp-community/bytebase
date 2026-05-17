@@ -1,3 +1,5 @@
+import { ErrorBoundary } from "./components/ErrorBoundary";
+
 // Use import.meta.glob so vue-tsc does not follow the import into React .tsx files.
 // Vite resolves the glob at build time and creates a lazy chunk for the matched module.
 const settingsPageLoaders = import.meta.glob("./pages/settings/*.tsx");
@@ -37,6 +39,10 @@ type ReactComponent = (props: any) => any; // eslint-disable-line @typescript-es
 let cachedDeps: ReactDeps | null = null;
 const cachedPages = new Map<string, ReactComponent>();
 
+export function clearPageCache(): void {
+  cachedPages.clear();
+}
+
 async function loadCoreDeps() {
   if (cachedDeps) return cachedDeps;
   const [
@@ -44,11 +50,13 @@ async function loadCoreDeps() {
     { createRoot },
     { I18nextProvider },
     i18nModule,
+    { QueryProvider },
   ] = await Promise.all([
     import("react"),
     import("react-dom/client"),
     import("react-i18next"),
     import("@/react/i18n"),
+    import("@/react/providers/QueryProvider"),
   ]);
   await i18nModule.i18nReady;
   cachedDeps = {
@@ -56,6 +64,7 @@ async function loadCoreDeps() {
     StrictMode,
     createRoot,
     I18nextProvider,
+    QueryProvider,
     i18n: i18nModule.default,
   };
   return cachedDeps;
@@ -109,15 +118,28 @@ function buildTree(
   deps: ReactDeps,
   Component: ReactComponent,
   // biome-ignore lint/suspicious/noExplicitAny: Props type varies per page
-  props?: any // eslint-disable-line @typescript-eslint/no-explicit-any
+  props?: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+  pageName?: string
 ) {
+  if (!Component) {
+    console.error("buildTree called with undefined Component");
+    return deps.createElement("div", null, "Component load failed");
+  }
   return deps.createElement(
-    deps.StrictMode,
-    null,
+    ErrorBoundary,
+    { pageName },
     deps.createElement(
-      deps.I18nextProvider,
-      { i18n: deps.i18n },
-      deps.createElement(Component, props)
+      deps.StrictMode,
+      null,
+      deps.createElement(
+        deps.QueryProvider,
+        null,
+        deps.createElement(
+          deps.I18nextProvider,
+          { i18n: deps.i18n },
+          deps.createElement(Component, props)
+        )
+      )
     )
   );
 }
@@ -135,7 +157,7 @@ export async function mountReactPage(
 ) {
   const [deps, Component] = await Promise.all([loadCoreDeps(), loadPage(page)]);
   const root = deps.createRoot(container);
-  root.render(buildTree(deps, Component, props));
+  root.render(buildTree(deps, Component, props, page));
   return root;
 }
 
@@ -150,5 +172,5 @@ export async function updateReactPage(
   props?: any // eslint-disable-line @typescript-eslint/no-explicit-any
 ) {
   const [deps, Component] = await Promise.all([loadCoreDeps(), loadPage(page)]);
-  root.render(buildTree(deps, Component, props));
+  root.render(buildTree(deps, Component, props, page));
 }

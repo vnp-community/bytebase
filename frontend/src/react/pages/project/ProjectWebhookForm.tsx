@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { clone } from "@bufbuild/protobuf";
 import { isEqual } from "lodash-es";
 import { EllipsisVertical, Info } from "lucide-react";

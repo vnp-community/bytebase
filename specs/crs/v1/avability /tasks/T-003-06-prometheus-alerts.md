@@ -46,5 +46,5 @@ groups:
 
 ## Acceptance Criteria
 
-- [ ] 4 alert rules covering health, CB, memory, pool
-- [ ] Valid Prometheus alerting rule YAML syntax
+- [x] 4 alert rules covering health, CB, memory, pool
+- [x] Valid Prometheus alerting rule YAML syntax

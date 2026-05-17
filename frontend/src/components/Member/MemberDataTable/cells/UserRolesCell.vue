@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <div class="flex flex-row items-center flex-wrap gap-1">
     <RoleCell

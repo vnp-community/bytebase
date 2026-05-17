@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 export { EngineIcon } from "../EngineIcon";
 export { CreateDataSourceExample } from "./CreateDataSourceExample";
 export { CredentialSourceForm } from "./CredentialSourceForm";

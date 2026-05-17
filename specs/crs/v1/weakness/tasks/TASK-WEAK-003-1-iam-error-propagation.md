@@ -6,6 +6,9 @@
 | Priority | P0 |
 | Depends On | — |
 | Est. | M (~150 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-12 |
+| Notes | Closures in `CheckPermission` now return errors. `check()` replaced by `checkWithErrors()`. `bytebase_iam_store_errors_total{operation}` counter added. |
 
 ## Objective
 

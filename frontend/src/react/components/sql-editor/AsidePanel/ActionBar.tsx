@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useAvailableActions } from "../SchemaPane/availableActions";
 import { ActionBarTabItem } from "./ActionBarTabItem";
 

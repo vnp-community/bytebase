@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { EnvironmentLabel } from "@/react/components/EnvironmentLabel";

@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <svg
     xmlns="http://www.w3.org/2000/svg"

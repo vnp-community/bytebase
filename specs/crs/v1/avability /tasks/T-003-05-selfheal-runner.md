@@ -24,7 +24,7 @@ Xem SOL-AVAIL-003 §2.5. Tóm tắt:
 
 ## Acceptance Criteria
 
-- [ ] Runner follows standard pattern: `Run(ctx, *sync.WaitGroup)`
-- [ ] Uses existing `store.DeleteCache()` for pool healing
-- [ ] Only runs in HA mode (`profile.HA`)
-- [ ] `go build ./backend/...` passes
+- [x] Runner follows standard pattern: `Run(ctx, *sync.WaitGroup)`
+- [x] Uses existing `store.DeleteCache()` for pool healing
+- [x] Only runs in HA mode (`profile.HA`)
+- [x] `go build ./backend/...` passes

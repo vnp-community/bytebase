@@ -1,28 +1,18 @@
 (() => {
   if (typeof WeakRef === "undefined") {
-    class WeakRefPolyfill<T extends WeakKey> {
-      private targetMap = new Map<WeakRefPolyfill<T>, T | undefined>();
-      private target: T;
-
+    console.warn(
+      "[Bytebase] Your browser does not support WeakRef. " +
+      "Memory usage may increase over time. Please upgrade your browser."
+    );
+    class WeakRefShim<T extends WeakKey> {
       readonly [Symbol.toStringTag] = "WeakRef";
-
-      constructor(target: T) {
-        if (typeof target !== "object" || target === null) {
-          throw new TypeError("WeakRef target must be an object.");
-        }
-        this.target = target;
-        this.targetMap.set(this, target);
-      }
-
-      deref(): T | undefined {
-        const target = this.targetMap.get(this);
-        return target ?? undefined;
-      }
+      private readonly _target: T;
+      constructor(target: T) { this._target = target; }
+      deref(): T | undefined { return this._target; }
     }
 
-    // Use a specific type instead of any
     (
-      globalThis as typeof globalThis & { WeakRef: typeof WeakRefPolyfill }
-    ).WeakRef = WeakRefPolyfill;
+      globalThis as typeof globalThis & { WeakRef: typeof WeakRefShim }
+    ).WeakRef = WeakRefShim;
   }
 })();

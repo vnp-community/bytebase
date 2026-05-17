@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <component :is="tag" class="flex items-center gap-x-0.5">
     <EngineIcon :engine="engine" />

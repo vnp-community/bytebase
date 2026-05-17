@@ -8,6 +8,7 @@
 | **Priority** | P2 |
 | **Depends on** | None |
 | **Blocks** | None |
+| **Status** | DONE |
 
 ## Objective
 

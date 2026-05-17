@@ -6,6 +6,8 @@
 | Priority | P1 |
 | Depends On | — |
 | Est. | S (~40 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-12 |
 
 ## Objective
 
@@ -17,11 +19,15 @@ Add GitHub Actions workflow that fails PR if unit test coverage drops below thre
 |--------|------|
 | CREATE | `.github/workflows/coverage.yml` |
 
-## Specification
+## Implementation Notes
+
+### Workflow: `.github/workflows/coverage.yml`
 
 ```yaml
 name: Coverage Gate
 on: [pull_request]
+permissions:
+  contents: read
 jobs:
   coverage:
     runs-on: ubuntu-latest
@@ -37,15 +43,31 @@ jobs:
             ./backend/store/...
       - name: Check coverage threshold
         run: |
-          go tool cover -func=coverage.out | \
-          awk '/^total:/ { gsub(/%/,"",$3); if ($3 < 50) { print "FAIL: " $3 "% < 50%"; exit 1 } }'
+          COVERAGE=$(go tool cover -func=coverage.out | awk '/^total:/ { gsub(/%/,"",$3); print $3 }')
+          echo "Total coverage: ${COVERAGE}%"
+          if [ "$(echo "$COVERAGE < 50" | bc -l)" -eq 1 ]; then
+            echo "::error::FAIL: coverage ${COVERAGE}% is below the 50% threshold"
+            exit 1
+          fi
+          echo "::notice::Coverage ${COVERAGE}% meets the 50% threshold"
       - uses: codecov/codecov-action@v4
-        with: { file: coverage.out }
+        if: always()
+        with:
+          file: coverage.out
+          fail_ci_if_error: false
 ```
+
+### Key Design Decisions
+
+1. **50% threshold** — initial floor, intended to be incrementally raised as test suite grows
+2. **Unit tests only** — no testcontainers or DB dependencies for fast CI feedback (~30s)
+3. **Scoped packages** — only `backend/api/v1`, `backend/component`, `backend/store` (core domain)
+4. **Codecov upload** — `always()` condition ensures report is uploaded even on threshold failure
+5. **`bc -l` comparison** — handles decimal coverage percentages correctly
 
 ## Acceptance Criteria
 
-- [ ] Workflow triggers on PR
-- [ ] Fails if coverage < 50%
-- [ ] Coverage report uploaded to Codecov
-- [ ] Runs only unit tests (no testcontainers)
+- [x] Workflow triggers on PR
+- [x] Fails if coverage < 50%
+- [x] Coverage report uploaded to Codecov
+- [x] Runs only unit tests (no testcontainers)

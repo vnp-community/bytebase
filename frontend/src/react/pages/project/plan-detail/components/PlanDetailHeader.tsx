@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { clone, create } from "@bufbuild/protobuf";
 import { Ban, ChevronUp, Loader2, Menu, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

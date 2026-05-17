@@ -38,8 +38,8 @@ Add: `s.store.UpdateTaskRunAssignedNode(ctx, taskRunUID, s.profile.ReplicaID)`
 
 ## Acceptance Criteria
 
-- [ ] Migration adds `assigned_node` column
-- [ ] `FindOrphanedTaskRuns` finds RUNNING tasks on dead nodes
-- [ ] Reset to PENDING with recovery note
-- [ ] Task scheduler records `assigned_node` on start
-- [ ] `go build ./backend/...` passes
+- [x] Migration adds `assigned_node` column
+- [x] `FindOrphanedTaskRuns` finds RUNNING tasks on dead nodes
+- [x] Reset to PENDING with recovery note
+- [x] Task scheduler records `assigned_node` on start
+- [x] `go build ./backend/...` passes

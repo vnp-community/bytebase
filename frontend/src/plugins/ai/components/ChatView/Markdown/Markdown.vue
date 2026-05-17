@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <AstToMarkdown :ast="mdast" class="text-sm">
     <template #code="parsedAst">

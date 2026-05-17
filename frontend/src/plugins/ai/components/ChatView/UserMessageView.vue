@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <div
     class="user-message max-w-[60%] min-w-36 border rounded-sm shadow-sm py-1 px-2 bg-indigo-100 border-indigo-400"

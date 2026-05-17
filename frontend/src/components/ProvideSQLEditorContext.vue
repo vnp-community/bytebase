@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <teleport to="#sql-editor-debug">
     <li>[ProvideContext]project: {{ editorStore.project }}</li>

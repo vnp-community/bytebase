@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useCallback, useState } from "react";
 import { pushNotification } from "@/store";
 import { useSchemaDiagramContext } from "../../common/context";

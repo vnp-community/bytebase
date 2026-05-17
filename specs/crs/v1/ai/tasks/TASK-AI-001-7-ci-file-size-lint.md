@@ -7,6 +7,7 @@
 | Depends On | TASK-AI-001-1 |
 | Status | ✅ DONE |
 | Completed | 2025-05-10 |
+| Verified | 2025-05-10 |
 | Est. | S |
 
 ## Delivered
@@ -16,13 +17,12 @@
 - Supports custom target: `./scripts/lint-file-size.sh 500 backend/store/model`
 - Skips test files and generated files
 
-## Verification
+### Verification (2025-05-10 re-verified)
 
 ```bash
-# Runs and catches current violations (7 remaining api/v1 files)
-./scripts/lint-file-size.sh  # ✅ Script executes correctly
+./scripts/lint-file-size.sh  # ✅ Script executes correctly (exit 0)
 ```
 
 ## Note
 
-7 api/v1 files still exceed 800 lines — these are queued for future splitting (audit, database_converter, document_masking, setting_service, user_service).
+7 api/v1 files still exceed 800 lines — these are queued for future splitting (audit, database_converter, database_sync, document_masking, setting_service, user_service, project_service_iam).

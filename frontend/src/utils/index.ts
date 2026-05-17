@@ -30,4 +30,5 @@ export * from "./expr";
 export * from "./accessGrant";
 export * from "./storage-keys";
 export * from "./storage-migrate";
+export * from "./storage-service";
 export * from "./document-title";

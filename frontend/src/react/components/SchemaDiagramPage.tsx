@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 /**
  * Top-level page shim so `ReactPageMount` can locate the
  * `<SchemaDiagram>` root via `mount.ts`'s `pageDirs` lookup (it scans

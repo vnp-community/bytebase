@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { Select as BaseSelect } from "@base-ui/react/select";
 import { cva, type VariantProps } from "class-variance-authority";
 import { Check, ChevronDown } from "lucide-react";

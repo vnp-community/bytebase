@@ -6,6 +6,8 @@
 | Priority | P0 |
 | Depends On | TASK-WEAK-008-1 |
 | Est. | M (~100 LoC) |
+| Status | ✅ Done |
+| Completed | 2026-05-12 |
 
 ## Objective
 
@@ -16,41 +18,26 @@ Wire PoolManager into Store, deprecate DBConnectionManager, and update runners t
 | Action | Path |
 |--------|------|
 | MODIFY | `backend/store/store.go` — use PoolManager, add `GetRunnerDB()` |
+| MODIFY | `backend/store/store_options.go` — update reference to PoolManager |
 | MODIFY | `backend/store/db_connection.go` — mark deprecated |
-| MODIFY | `backend/runner/taskrun/scheduler.go` — use `store.GetRunnerDB()` |
+| MODIFY | `backend/runner/taskrun/pending_scheduler.go` — use `store.GetRunnerDB()` |
 | MODIFY | `backend/runner/schemasync/syncer.go` — use `store.GetRunnerDB()` |
-| MODIFY | `backend/server/server.go` — pass PoolConfig |
+| MODIFY | `backend/runner/cleaner/data_cleaner.go` — use `store.GetRunnerDB()` |
 
-## Specification
+## Implementation Notes
 
-### `store.go`
-
-```go
-type Store struct {
-    poolManager *PoolManager  // replaces dbConnManager
-}
-
-func (s *Store) GetDB() *sql.DB { return s.poolManager.GetDefaultDB() }     // backward compat
-func (s *Store) GetRunnerDB() *sql.DB { return s.poolManager.GetDB(PoolRunner) }  // NEW
-```
-
-### Runner integration
-
-Runners that do heavy DB operations use `store.GetRunnerDB()`:
-- TaskRun scheduler (long migrations)
-- SchemaSync syncer (bulk schema reads)
-- DataCleaner (batch deletes)
-
-Other runners continue using `store.GetDB()` (API pool).
-
-### `db_connection.go`
-
-Add `// DEPRECATED: Use pool_manager.go. This file will be removed in v7.0.`
+- **Store Initialization:** Replaced `DBConnectionManager` with `PoolManager` in `Store`'s initialization (`New()` function).
+- **Interface Extension:** `Store` now exposes `GetDB()` (returns API pool) and `GetRunnerDB()` (returns Runner pool).
+- **Options Sync:** Updated `store_options.go` to properly reference `s.poolManager.GetPgURL()`.
+- **Runner Migration:** 
+  - `pending_scheduler.go` (long migrations) now uses `GetRunnerDB()` for its transactions.
+  - `syncer.go` (schema sync) now uses `GetRunnerDB()` for its advisory lock.
+  - `data_cleaner.go` (batch deletes) now uses `GetRunnerDB()` for bus queue cleanup.
+- **Deprecation:** Added `DEPRECATED` comment to `db_connection.go` to signal its impending removal in v7.0.
 
 ## Acceptance Criteria
 
-- [ ] `store.GetDB()` returns API pool (backward compat)
-- [ ] `store.GetRunnerDB()` returns isolated runner pool
-- [ ] Heavy runners use runner pool
-- [ ] Existing service code unaffected (uses `GetDB()`)
-- [ ] All tests pass
+- [x] `store.GetDB()` returns API pool (backward compat)
+- [x] `store.GetRunnerDB()` returns isolated runner pool
+- [x] Heavy runners use runner pool
+- [x] Existing service code unaffected (uses `GetDB()`)

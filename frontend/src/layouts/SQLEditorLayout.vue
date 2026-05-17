@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <div class="relative h-screen overflow-hidden flex flex-col">
     <ul

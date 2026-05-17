@@ -1,3 +1,4 @@
+<!-- i18n: vue-i18n | use t("key") from useI18n() -->
 <template>
   <BBModal :title="$t('common.preview')" @close="$emit('cancel')">
     <div class="w-144 py-1 flex flex-col justify-start items-start gap-2">

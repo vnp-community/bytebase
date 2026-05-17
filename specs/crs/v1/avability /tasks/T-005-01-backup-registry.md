@@ -50,7 +50,7 @@ CREATE INDEX idx_backup_registry_data_time ON backup_registry (data_timestamp DE
 
 ## Acceptance Criteria
 
-- [ ] `BackupRecord` struct matching table schema
-- [ ] 4 CRUD methods
-- [ ] Migration SQL idempotent
-- [ ] `go build ./backend/store/...` passes
+- [x] `BackupRecord` struct matching table schema
+- [x] 4 CRUD methods
+- [x] Migration SQL idempotent
+- [x] `go build ./backend/store/...` passes

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/react/lib/utils";
 import type { TableMetadata } from "@/types/proto-es/v1/database_service_pb";

@@ -1,3 +1,4 @@
+// i18n: i18next | use t("key") from useTranslation()
 import { useTranslation } from "react-i18next";
 import { Combobox } from "@/react/components/ui/combobox";
 import type { SchemaMetadata } from "@/types/proto-es/v1/database_service_pb";

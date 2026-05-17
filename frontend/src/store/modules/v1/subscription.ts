@@ -50,62 +50,28 @@ export const useSubscriptionV1Store = defineStore("subscription_v1", () => {
 
   // Getters
   const currentPlan = computed(() => {
-    if (!subscription.value) {
-      return PlanType.FREE;
-    }
-    return subscription.value.plan;
+    // VNP-LIC-001: Always report Enterprise plan
+    return PlanType.ENTERPRISE;
   });
 
-  const isFreePlan = computed(() => currentPlan.value === PlanType.FREE);
+  const isFreePlan = computed(() => false); // VNP-LIC-001
 
   const instanceCountLimit = computed(() => {
-    let limit = subscription.value?.instances ?? 0;
-    if (limit > 0) {
-      return limit;
-    }
-
-    limit =
-      PLANS.find((plan) => plan.type === currentPlan.value)
-        ?.maximumInstanceCount ?? 0;
-    if (limit < 0) {
-      const instanceLimitInLicense = subscription.value?.instances ?? 0;
-      if (instanceLimitInLicense > 0) {
-        return instanceLimitInLicense;
-      }
-      return Number.MAX_VALUE;
-    }
-    return limit;
+    // VNP-LIC-001: Unlimited instances
+    return Number.MAX_VALUE;
   });
 
   const userCountLimit = computed(() => {
-    let limit =
-      PLANS.find((plan) => plan.type === currentPlan.value)?.maximumSeatCount ??
-      0;
-    if (limit < 0) {
-      limit = Number.MAX_VALUE;
-    }
-
-    const seatCount = subscription.value?.seats ?? 0;
-    if (seatCount < 0) {
-      return Number.MAX_VALUE;
-    }
-    if (seatCount === 0) {
-      return limit;
-    }
-    return seatCount;
+    // VNP-LIC-001: Unlimited seats
+    return Number.MAX_VALUE;
   });
 
   const instanceLicenseCount = computed(() => {
-    const count = subscription.value?.activeInstances ?? 0;
-    if (count < 0) {
-      return Number.MAX_VALUE;
-    }
-    return count;
+    // VNP-LIC-001: Unlimited instance licenses
+    return Number.MAX_VALUE;
   });
 
-  const hasUnifiedInstanceLicense = computed(() => {
-    return instanceCountLimit.value <= instanceLicenseCount.value;
-  });
+  const hasUnifiedInstanceLicense = computed(() => true); // VNP-LIC-001
 
   const hasSplitInstanceLicense = computed(() => {
     return !isFreePlan.value && !hasUnifiedInstanceLicense.value;
@@ -125,20 +91,9 @@ export const useSubscriptionV1Store = defineStore("subscription_v1", () => {
     );
   });
 
-  const isTrialing = computed(() => !!subscription.value?.trialing);
+  const isTrialing = computed(() => false); // VNP-LIC-001
 
-  const isExpired = computed(() => {
-    if (
-      !subscription.value ||
-      !subscription.value.expiresTime ||
-      isFreePlan.value
-    ) {
-      return false;
-    }
-    return dayjs(
-      getDateForPbTimestampProtoEs(subscription.value.expiresTime)
-    ).isBefore(new Date());
-  });
+  const isExpired = computed(() => false); // VNP-LIC-001: Never expired
 
   const daysBeforeExpire = computed(() => {
     if (
@@ -159,17 +114,9 @@ export const useSubscriptionV1Store = defineStore("subscription_v1", () => {
     () => import.meta.env.MODE.toLowerCase() !== "release-aws"
   );
 
-  const showTrial = computed(() => {
-    if (!isSelfHostLicense.value) {
-      return false;
-    }
-    if (!subscription.value || isFreePlan.value) {
-      return true;
-    }
-    return false;
-  });
+  const showTrial = computed(() => false); // VNP-LIC-001
 
-  const isHAAllowed = computed(() => subscription.value?.ha ?? false);
+  const isHAAllowed = computed(() => true); // VNP-LIC-001
 
   const purchaseLicenseUrl = computed(
     () => import.meta.env.BB_PURCHASE_LICENSE_URL as string
@@ -180,50 +127,25 @@ export const useSubscriptionV1Store = defineStore("subscription_v1", () => {
     subscription.value = sub;
   };
 
-  const hasFeature = (feature: PlanFeature) => {
-    if (isExpired.value) {
-      return false;
-    }
-    return checkFeature(currentPlan.value, feature);
+  const hasFeature = (_feature: PlanFeature) => {
+    // VNP-LIC-001: All features enabled
+    return true;
   };
 
   const hasInstanceFeature = (
-    feature: PlanFeature,
-    instance: Instance | InstanceResource | undefined = undefined
+    _feature: PlanFeature,
+    _instance: Instance | InstanceResource | undefined = undefined
   ) => {
-    // For FREE plan, don't check instance activation
-    if (currentPlan.value === PlanType.FREE) {
-      return hasFeature(feature);
-    }
-
-    // If no instance provided or feature is not instance-limited
-    if (!instance || !instanceLimitFeature.has(feature)) {
-      return hasFeature(feature);
-    }
-
-    return checkInstanceFeature(
-      currentPlan.value,
-      feature,
-      hasUnifiedInstanceLicense.value || instance.activation
-    );
+    // VNP-LIC-001: All instance features enabled
+    return true;
   };
 
   const instanceMissingLicense = (
-    feature: PlanFeature,
-    instance: Instance | InstanceResource | undefined = undefined
+    _feature: PlanFeature,
+    _instance: Instance | InstanceResource | undefined = undefined
   ) => {
-    // Only relevant for instance-limited features
-    if (!instanceLimitFeature.has(feature)) {
-      return false;
-    }
-    if (!instance) {
-      return false;
-    }
-    if (hasUnifiedInstanceLicense.value) {
-      return false;
-    }
-    // Feature is available in plan but instance is not activated
-    return hasFeature(feature) && !instance.activation;
+    // VNP-LIC-001: No instance ever missing license
+    return false;
   };
 
   // Fetch subscription. When cache=false, returns the result without updating the store.

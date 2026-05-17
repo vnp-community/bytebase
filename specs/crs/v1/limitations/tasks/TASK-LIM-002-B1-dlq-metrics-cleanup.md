@@ -47,7 +47,15 @@ func (c *DataCleaner) cleanBusOutbox(ctx context.Context) {
 
 ## Acceptance Criteria
 
-- [ ] DLQ list, replay, purge endpoints functional
-- [ ] Replayed messages are re-processed by consumers
-- [ ] DataCleaner removes DONE messages after retention period
-- [ ] Prometheus metrics exported for all bus operations
+- [x] DLQ list, replay, purge endpoints functional → **DONE**: `bus_admin_service.go` with ListDLQMessages, ReplayDLQMessage, ReplayAllDLQ, PurgeDLQ, GetDLQStats
+- [x] Replayed messages are re-processed by consumers → **DONE**: ReplayDLQMessage resets status='pending', attempts=0
+- [x] DataCleaner removes DONE messages after retention period → **DONE**: `cleanupBusQueue()` deletes done after 24h + reclaims stale processing after 5min
+- [x] Prometheus metrics exported for all bus operations → **DONE**: Existing `metrics.go` exports pending/processing/failed/published/consumed metrics
+
+## Implementation Notes
+
+- Created `backend/api/v1/bus_admin_service.go` (~160 LoC) — DLQ admin with pagination, per-channel filtering
+- Extended `data_cleaner.go` with `cleanupBusQueue()` — dual cleanup: done retention + stale claim reclamation
+- `metrics.go` already existed with full Prometheus instrumentation via `BusMetrics.RunCollector()`
+
+**Status: ✅ DONE**

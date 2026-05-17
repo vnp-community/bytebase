@@ -25,7 +25,7 @@ const (
 )
 
 // NewScheduler creates a new plan check scheduler.
-func NewScheduler(s *store.Store, bus *bus.Bus, executor *CombinedExecutor, licenseService *enterprise.LicenseService) *Scheduler {
+func NewScheduler(s *store.Store, bus bus.EventBus, executor *CombinedExecutor, licenseService *enterprise.LicenseService) *Scheduler {
 	return &Scheduler{
 		store:          s,
 		bus:            bus,
@@ -37,7 +37,7 @@ func NewScheduler(s *store.Store, bus *bus.Bus, executor *CombinedExecutor, lice
 // Scheduler is the plan check run scheduler.
 type Scheduler struct {
 	store          *store.Store
-	bus            *bus.Bus
+	bus            bus.EventBus
 	executor       *CombinedExecutor
 	licenseService *enterprise.LicenseService
 }

@@ -80,6 +80,9 @@ type TaskStatusCount struct {
 
 // GetTaskByID gets a task by ID.
 func (s *Store) GetTaskByID(ctx context.Context, projectID string, id int64) (*TaskMessage, error) {
+	if err := validateCompositePKQuery("task", projectID, &id); err != nil {
+		return nil, err
+	}
 	tasks, err := s.ListTasks(ctx, &TaskFind{ProjectID: projectID, ID: &id})
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get Task with ID %d", id)
